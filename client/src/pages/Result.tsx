@@ -8,7 +8,7 @@ const animeOptions = [
   { label: 'Naruto' }, { label: 'Bleach' }, { label: 'Attack on Titan' }
 ];
 
-const Dashboard: React.FC = () => {
+const Result: React.FC = () => {
   return (
     <Box display="flex" height="calc(100vh - 128px)">
       {/* Sidebar */}
@@ -122,4 +122,4 @@ const Dashboard: React.FC = () => {
   );
 };
 
-export default Dashboard;
+export default Result;

@@ -13,6 +13,18 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
   };
   
 
+// GET /api/anime/titles
+export const getAnimeTitles = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const titles = await Anime.find({}, { title: 1, _id: 0 });
+      const formatted = titles.map((t) => ({ label: t.title }));
+      res.status(200).json(formatted);
+    } catch (err) {
+      res.status(500).json({ message: 'Error fetching anime titles.' });
+    }
+  };
+  
+
 export const createAnime = async (req: Request, res: Response): Promise<void> => {
     try {
       const anime = new Anime(req.body);

@@ -1,28 +1,35 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Typography,
   TextField,
   Button,
   Autocomplete,
+  CircularProgress,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-
-const animeOptions = [
-  { label: 'Attack on Titan' },
-  { label: 'Fullmetal Alchemist: Brotherhood' },
-  { label: 'Death Note' },
-  { label: 'Naruto' },
-  { label: 'My Hero Academia' },
-  { label: 'Jujutsu Kaisen' },
-  { label: 'Demon Slayer' },
-  { label: 'One Piece' },
-  { label: 'Spy x Family' },
-  { label: 'Your Lie in April' },
-];
+import axios from 'axios';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
+  const [animeOptions, setAnimeOptions] = useState<{ label: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchTitles = async () => {
+      setLoading(true);
+      try {
+        const res = await axios.get('http://localhost:5000/api/anime/titles');
+        setAnimeOptions(res.data);
+      } catch (err) {
+        console.error('Failed to load anime titles:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTitles();
+  }, []);
 
   return (
     <Box
@@ -39,7 +46,7 @@ const Home: React.FC = () => {
         px: 3,
       }}
     >
-      {/* Angular toned-down background */}
+      {/* Background */}
       <Box
         sx={{
           position: 'absolute',
@@ -48,13 +55,7 @@ const Home: React.FC = () => {
           height: '100%',
           width: '100%',
           zIndex: -1,
-          background: `
-            linear-gradient(to bottom right,
-              #ff7f50 0%,
-              #ff7f50 50%,
-              #ffec99 50%,
-              #ffec99 75%,
-              #b3d9ff 75%)`,
+          background: `linear-gradient(to bottom right, #ff7f50 0%, #ff7f50 50%, #ffec99 50%, #ffec99 75%, #b3d9ff 75%)`,
           clipPath: `polygon(0 0, 100% 0, 100% 100%, 0 100%)`,
         }}
       />
@@ -71,13 +72,22 @@ const Home: React.FC = () => {
         <Autocomplete
           options={animeOptions}
           getOptionLabel={(option) => option.label}
+          loading={loading}
           sx={{ width: { xs: '100%', md: '300px' }, bgcolor: 'white' }}
           renderInput={(params) => (
             <TextField
               {...params}
               label="What is an anime you like?"
               variant="outlined"
-              sx={{ borderRadius: '20px' }}
+              InputProps={{
+                ...params.InputProps,
+                endAdornment: (
+                  <>
+                    {loading ? <CircularProgress color="inherit" size={20} /> : null}
+                    {params.InputProps.endAdornment}
+                  </>
+                ),
+              }}
             />
           )}
         />
