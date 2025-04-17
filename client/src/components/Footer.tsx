@@ -3,10 +3,19 @@ import { Box, Typography } from '@mui/material';
 
 const Footer: React.FC = () => {
   return (
-    <Box display="flex" flexDirection="column" minHeight="100vh">
-        <Typography variant="h3" mb={3}>
-          YourApp@2025
-        </Typography>
+    <Box
+      component="footer"
+      sx={{
+        backgroundColor: '#1e1e1e',
+        color: 'white',
+        textAlign: 'center',
+        py: 2,
+        mt: 'auto',
+      }}
+    >
+      <Typography variant="body2">
+        © {new Date().getFullYear()} AniMatch. All rights reserved.
+      </Typography>
     </Box>
   );
 };

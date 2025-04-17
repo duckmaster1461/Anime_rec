@@ -1,15 +1,21 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import LandingPage from './pages/LandingPage';
-import Dashboard from './pages/Dashboard';
+import Home from './pages/Home';
+import Result from './pages/Result';
+import Header from './components/Header';
+import Footer from './components/Footer';
 
 const App: React.FC = () => {
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-      </Routes>
+      <div className="App" style={{ overflow: 'hidden', height: '100vh' }}>
+        <Header />
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/result" element={<Result />} />
+        </Routes>
+        <Footer />
+      </div>
     </Router>
   );
 };
