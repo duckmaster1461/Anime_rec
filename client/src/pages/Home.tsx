@@ -13,6 +13,8 @@ import axios from 'axios';
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const [animeOptions, setAnimeOptions] = useState<{ label: string }[]>([]);
+  const [selectedAnime1, setSelectedAnime1] = useState<{ label: string } | null>(null);
+  const [selectedAnime2, setSelectedAnime2] = useState<{ label: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -30,6 +32,14 @@ const Home: React.FC = () => {
 
     fetchTitles();
   }, []);
+
+  // Filter options based on what's selected in the opposite field
+  const filteredOptions1 = animeOptions.filter(
+    (opt) => !selectedAnime2 || opt.label !== selectedAnime2.label
+  );
+  const filteredOptions2 = animeOptions.filter(
+    (opt) => !selectedAnime1 || opt.label !== selectedAnime1.label
+  );
 
   return (
     <Box
@@ -70,7 +80,9 @@ const Home: React.FC = () => {
 
       <Box display="flex" gap={2} flexDirection={{ xs: 'column', md: 'row' }} mb={4}>
         <Autocomplete
-          options={animeOptions}
+          options={filteredOptions1}
+          value={selectedAnime1}
+          onChange={(_, value) => setSelectedAnime1(value)}
           getOptionLabel={(option) => option.label}
           loading={loading}
           sx={{ width: { xs: '100%', md: '300px' }, bgcolor: 'white' }}
@@ -92,14 +104,29 @@ const Home: React.FC = () => {
           )}
         />
 
-        <TextField
-          variant="outlined"
-          label="What is another anime you like?"
-          sx={{
-            width: { xs: '100%', md: '300px' },
-            bgcolor: 'white',
-            borderRadius: '20px',
-          }}
+        <Autocomplete
+          options={filteredOptions2}
+          value={selectedAnime2}
+          onChange={(_, value) => setSelectedAnime2(value)}
+          getOptionLabel={(option) => option.label}
+          loading={loading}
+          sx={{ width: { xs: '100%', md: '300px' }, bgcolor: 'white' }}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="What is another anime you like?"
+              variant="outlined"
+              InputProps={{
+                ...params.InputProps,
+                endAdornment: (
+                  <>
+                    {loading ? <CircularProgress color="inherit" size={20} /> : null}
+                    {params.InputProps.endAdornment}
+                  </>
+                ),
+              }}
+            />
+          )}
         />
       </Box>
 
