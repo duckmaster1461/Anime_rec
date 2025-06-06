@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -9,37 +9,60 @@ import {
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import debounce from 'lodash.debounce';
+
+interface AnimeOption {
+  label: string;
+}
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
-  const [animeOptions, setAnimeOptions] = useState<{ label: string }[]>([]);
-  const [selectedAnime1, setSelectedAnime1] = useState<{ label: string } | null>(null);
-  const [selectedAnime2, setSelectedAnime2] = useState<{ label: string } | null>(null);
-  const [loading, setLoading] = useState(false);
+
+  const [options1, setOptions1] = useState<AnimeOption[]>([]);
+  const [options2, setOptions2] = useState<AnimeOption[]>([]);
+  const [loading1, setLoading1] = useState(false);
+  const [loading2, setLoading2] = useState(false);
+
+  const [selectedAnime1, setSelectedAnime1] = useState<AnimeOption | string | null>(null);
+  const [selectedAnime2, setSelectedAnime2] = useState<AnimeOption | string | null>(null);
+
+  const fetchAnimeTitles = async (
+    query: string,
+    setter: React.Dispatch<React.SetStateAction<AnimeOption[]>>,
+    setLoading: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
+    if (!query) {
+      setter([]);
+      return;
+    }
+    try {
+      setLoading(true);
+      const res = await axios.get('http://localhost:5000/api/anime/titles', {
+        params: { q: query, limit: 10 },
+      });
+      setter(res.data);
+    } catch (err) {
+      console.error('Error fetching titles:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const debouncedFetch1 = useMemo(
+    () => debounce((q: string) => fetchAnimeTitles(q, setOptions1, setLoading1), 300),
+    []
+  );
+  const debouncedFetch2 = useMemo(
+    () => debounce((q: string) => fetchAnimeTitles(q, setOptions2, setLoading2), 300),
+    []
+  );
 
   useEffect(() => {
-    const fetchTitles = async () => {
-      setLoading(true);
-      try {
-        const res = await axios.get('http://localhost:5000/api/anime/titles');
-        setAnimeOptions(res.data);
-      } catch (err) {
-        console.error('Failed to load anime titles:', err);
-      } finally {
-        setLoading(false);
-      }
+    return () => {
+      debouncedFetch1.cancel();
+      debouncedFetch2.cancel();
     };
-
-    fetchTitles();
-  }, []);
-
-  // Filter options based on what's selected in the opposite field
-  const filteredOptions1 = animeOptions.filter(
-    (opt) => !selectedAnime2 || opt.label !== selectedAnime2.label
-  );
-  const filteredOptions2 = animeOptions.filter(
-    (opt) => !selectedAnime1 || opt.label !== selectedAnime1.label
-  );
+  }, [debouncedFetch1, debouncedFetch2]);
 
   return (
     <Box
@@ -66,7 +89,6 @@ const Home: React.FC = () => {
           width: '100%',
           zIndex: -1,
           background: `linear-gradient(to bottom right, #ff7f50 0%, #ff7f50 50%, #ffec99 50%, #ffec99 75%, #b3d9ff 75%)`,
-          clipPath: `polygon(0 0, 100% 0, 100% 100%, 0 100%)`,
         }}
       />
 
@@ -80,11 +102,15 @@ const Home: React.FC = () => {
 
       <Box display="flex" gap={2} flexDirection={{ xs: 'column', md: 'row' }} mb={4}>
         <Autocomplete
-          options={filteredOptions1}
+          freeSolo
+          options={options1}
+          loading={loading1}
+          onInputChange={(_, value) => debouncedFetch1(value)}
           value={selectedAnime1}
           onChange={(_, value) => setSelectedAnime1(value)}
-          getOptionLabel={(option) => option.label}
-          loading={loading}
+          getOptionLabel={(option) =>
+            typeof option === 'string' ? option : option.label
+          }
           sx={{ width: { xs: '100%', md: '300px' }, bgcolor: 'white' }}
           renderInput={(params) => (
             <TextField
@@ -95,7 +121,7 @@ const Home: React.FC = () => {
                 ...params.InputProps,
                 endAdornment: (
                   <>
-                    {loading ? <CircularProgress color="inherit" size={20} /> : null}
+                    {loading1 ? <CircularProgress color="inherit" size={20} /> : null}
                     {params.InputProps.endAdornment}
                   </>
                 ),
@@ -105,11 +131,15 @@ const Home: React.FC = () => {
         />
 
         <Autocomplete
-          options={filteredOptions2}
+          freeSolo
+          options={options2}
+          loading={loading2}
+          onInputChange={(_, value) => debouncedFetch2(value)}
           value={selectedAnime2}
           onChange={(_, value) => setSelectedAnime2(value)}
-          getOptionLabel={(option) => option.label}
-          loading={loading}
+          getOptionLabel={(option) =>
+            typeof option === 'string' ? option : option.label
+          }
           sx={{ width: { xs: '100%', md: '300px' }, bgcolor: 'white' }}
           renderInput={(params) => (
             <TextField
@@ -120,7 +150,7 @@ const Home: React.FC = () => {
                 ...params.InputProps,
                 endAdornment: (
                   <>
-                    {loading ? <CircularProgress color="inherit" size={20} /> : null}
+                    {loading2 ? <CircularProgress color="inherit" size={20} /> : null}
                     {params.InputProps.endAdornment}
                   </>
                 ),
