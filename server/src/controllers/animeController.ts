@@ -16,25 +16,39 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
 // GET /api/anime/titles
 export const getAnimeTitles = async (req: Request, res: Response): Promise<void> => {
   try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100); // Cap at 100
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
     const searchQuery = (req.query.q as string) || '';
 
     const filter = searchQuery
       ? { title: { $regex: searchQuery, $options: 'i' } }
       : {};
 
-    const titles = await Anime.find(filter, 'title') // 'title' is shorthand for { title: 1 }
-      .limit(limit)
+    // Step 1: Find matching documents with title + popularity
+    const animeList = await Anime.find(filter, { title: 1, popularity: 1, _id: 0 })
+      .sort({ popularity: 1 }) // most popular first
+      .limit(200)              // fetch more than needed to ensure unique trimming
       .lean();
 
-    const formatted = titles.map(t => ({ label: t.title }));
+    // Step 2: Remove duplicate titles (case-insensitive)
+    const seen = new Set<string>();
+    const uniqueTitles = [];
 
-    res.status(200).json(formatted);
+    for (const anime of animeList) {
+      const key = anime.title.toLowerCase().trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueTitles.push({ label: anime.title.trim() });
+      }
+      if (uniqueTitles.length === limit) break;
+    }
+
+    res.status(200).json(uniqueTitles);
   } catch (err) {
-    console.error("❌ Failed to fetch anime titles:", err);
+    console.error('❌ Failed to fetch anime titles:', err);
     res.status(500).json({ message: 'Error fetching anime titles.' });
   }
 };
+
 
 export const createAnime = async (req: Request, res: Response): Promise<void> => {
     try {

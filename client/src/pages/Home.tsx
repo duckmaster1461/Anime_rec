@@ -64,6 +64,23 @@ const Home: React.FC = () => {
     };
   }, [debouncedFetch1, debouncedFetch2]);
 
+  const handleClick = () => {
+    const label1 = typeof selectedAnime1 === 'string' ? selectedAnime1?.trim() : selectedAnime1?.label.trim();
+    const label2 = typeof selectedAnime2 === 'string' ? selectedAnime2?.trim() : selectedAnime2?.label.trim();
+
+    if (!label1 || !label2) {
+      alert('Please select two anime titles.');
+      return;
+    }
+
+    if (label1.toLowerCase() === label2.toLowerCase()) {
+      alert('Please select two different anime titles.');
+      return;
+    }
+
+    navigate('/result');
+  };
+
   return (
     <Box
       sx={{
@@ -103,7 +120,11 @@ const Home: React.FC = () => {
       <Box display="flex" gap={2} flexDirection={{ xs: 'column', md: 'row' }} mb={4}>
         <Autocomplete
           freeSolo
-          options={options1}
+          options={options1.filter(opt => {
+            if (!selectedAnime2) return true;
+            const selectedLabel = typeof selectedAnime2 === 'string' ? selectedAnime2 : selectedAnime2.label;
+            return opt.label !== selectedLabel;
+          })}
           loading={loading1}
           onInputChange={(_, value) => debouncedFetch1(value)}
           value={selectedAnime1}
@@ -132,7 +153,11 @@ const Home: React.FC = () => {
 
         <Autocomplete
           freeSolo
-          options={options2}
+          options={options2.filter(opt => {
+            if (!selectedAnime1) return true;
+            const selectedLabel = typeof selectedAnime1 === 'string' ? selectedAnime1 : selectedAnime1.label;
+            return opt.label !== selectedLabel;
+          })}
           loading={loading2}
           onInputChange={(_, value) => debouncedFetch2(value)}
           value={selectedAnime2}
@@ -162,7 +187,7 @@ const Home: React.FC = () => {
 
       <Button
         variant="contained"
-        onClick={() => navigate('/result')}
+        onClick={handleClick}
         sx={{
           px: 6,
           py: 1.5,
