@@ -4,15 +4,16 @@ import axios from 'axios';
 import debounce from 'lodash.debounce';
 import CircularProgress from '@mui/material/CircularProgress';
 import {
-  Box, Typography, TextField, Autocomplete, Button, Slider,
-  Radio, RadioGroup, FormControlLabel, FormLabel, Select, MenuItem, Pagination
+  Box, Typography, TextField, Autocomplete, Button, Pagination,
+  Slider, RadioGroup, Radio, FormControlLabel, FormLabel, Select, MenuItem
 } from '@mui/material';
 
 interface Anime {
-  title: string;
-  synopsis: string;
-  score: number;
-  aired: string;
+  Name: string;
+  Synopsis: string;
+  Score: number;
+  Aired: string;
+  "Image URL": string;
 }
 
 const PAGE_SIZE = 25;
@@ -33,7 +34,7 @@ const Result: React.FC = () => {
   const [afterYear, setAfterYear] = useState('');
   const [season, setSeason] = useState('');
   const [rating, setRating] = useState<number[]>([0, 10]);
-  const [sortField, setSortField] = useState('score');
+  const [sortField, setSortField] = useState('Score');
   const [animeList, setAnimeList] = useState<Anime[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -56,42 +57,51 @@ const Result: React.FC = () => {
   const debouncedFetch1 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions1, setLoading1), 300), []);
   const debouncedFetch2 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions2, setLoading2), 300), []);
 
-  const fetchResults = async (pageOverride = page) => {
-    try {
-      const res = await axios.get('http://localhost:5000/api/anime', {
-        params: {
-          anime1,
-          anime2,
-          sort: sortField,
-          order: 'desc',
-          beforeYear,
-          afterYear,
-          season,
-          minRating: rating[0],
-          maxRating: rating[1],
-          page: pageOverride,
-          limit: PAGE_SIZE,
-        }
-      });
-      setAnimeList(res.data.results);
-      setTotalCount(res.data.total || 0); // Backend must return total count
-    } catch (err) {
-      console.error('Failed to fetch anime list', err);
-    }
-  };
+  const sortMap: Record<string, string> = {
+  Score: 'score',
+  Aired: 'aired',
+  Popularity: 'popularity',
+  Episodes: 'episodes',
+  Duration: 'duration',
+  Favorites: 'favorites',
+  Ranked: 'ranked',
+  Members: 'members'
+};
 
-  useEffect(() => {
-    fetchResults();
-  }, [page]); // fetch on page change
+const fetchResults = async (pageOverride = page) => {
+  try {
+    const res = await axios.get('http://localhost:5000/api/anime', {
+      params: {
+        page: pageOverride,
+        limit: PAGE_SIZE,
+        sort: sortMap[sortField] || 'score',
+      }
+    });
+    setAnimeList(res.data.results);
+    setTotalCount(res.data.total || 0);
+  } catch (err) {
+    console.error('❌ Failed to fetch anime list', err);
+  }
+};
 
-  const handleSearch = () => {
+
+  const handleResetFilters = () => {
+    setBeforeYear('');
+    setAfterYear('');
+    setSeason('');
+    setRating([0, 10]);
+    setSortField('Score');
     setPage(1);
     fetchResults(1);
   };
 
+  useEffect(() => {
+    fetchResults();
+  }, [page, sortField]);
+
   return (
     <Box display="flex" height="calc(100vh - 128px)">
-      {/* Sidebar */}
+      {/* Sidebar Filters */}
       <Box
         width="300px"
         p={3}
@@ -124,18 +134,33 @@ const Result: React.FC = () => {
         <Box>
           <Typography gutterBottom>Sort by</Typography>
           <Select value={sortField} onChange={(e) => setSortField(e.target.value)} fullWidth>
-            <MenuItem value="score">Rating</MenuItem>
-            <MenuItem value="aired">Release Year</MenuItem>
-            <MenuItem value="popularity">Popularity</MenuItem>
+            <MenuItem value="Score">Rating</MenuItem>
+            <MenuItem value="Aired">Release Year</MenuItem>
+            <MenuItem value="Popularity">Popularity</MenuItem>
+            <MenuItem value="Episodes">Episodes</MenuItem>
+            <MenuItem value="Duration">Duration</MenuItem>
+            <MenuItem value="Favorites">Favorites</MenuItem>
+            <MenuItem value="Ranked">Rank</MenuItem>
+            <MenuItem value="Members">Members</MenuItem>
           </Select>
         </Box>
 
-        <Button variant="contained" onClick={handleSearch}>Search</Button>
+        <Button variant="outlined" onClick={handleResetFilters}>Reset Filters</Button>
       </Box>
 
       {/* Main Content */}
-      <Box flexGrow={1} p={4} overflow="auto">
-        <Box display="flex" gap={2} mb={4}>
+      <Box flexGrow={1} p={0} display="flex" flexDirection="column" height="100%">
+        {/* Sticky Search Bar */}
+        <Box
+          position="sticky"
+          top={0}
+          zIndex={10}
+          bgcolor="white"
+          p={3}
+          borderBottom="1px solid #ddd"
+          display="flex"
+          gap={2}
+        >
           <Autocomplete
             freeSolo
             options={options1.filter(opt => opt.label !== anime2)}
@@ -183,57 +208,83 @@ const Result: React.FC = () => {
             )}
             sx={{ width: 300 }}
           />
+          {/* TODO */}
+          <Button
+  variant="contained"
+  color="primary"  
+>
+  Search
+</Button>
 
-          <Button variant="contained" onClick={handleSearch} sx={{ borderRadius: 5, px: 4 }}>
-            Search
-          </Button>
         </Box>
 
-        <Typography variant="h5" fontWeight="bold" mb={2}>
-          Found {animeList?.length || 0} result{animeList?.length !== 1 ? 's' : ''}!
-        </Typography>
+        {/* Anime List */}
+        <Box flexGrow={1} overflow="auto" p={4}>
+          <Typography variant="h5" fontWeight="bold" mb={2}>
+            Found {animeList?.length || 0} result{animeList?.length !== 1 ? 's' : ''}!
+          </Typography>
 
-        <Box display="flex" flexDirection="column" gap={3}>
-          {animeList.length === 0 ? (
-            <Box p={3} border="1px dashed #999" borderRadius="20px" bgcolor="#fdfdfd" textAlign="center">
-              <Typography variant="h6" color="textSecondary">
-                No anime found for this filter. Try adjusting your search.
-              </Typography>
-            </Box>
-          ) : (
-            animeList.map((anime, idx) => (
-              <Box key={idx} p={3} border="1px solid #ccc" borderRadius="20px" bgcolor="white" display="flex" flexDirection="column">
-                <Typography variant="h6">{anime.title}</Typography>
-                <Typography variant="body2" color="textSecondary" mb={2}>
-                  {anime.synopsis?.slice(0, 200)}...
-                </Typography>
-                <Box display="flex" justifyContent="space-between" textAlign="center">
-                  <Box>
-                    <Typography variant="body1" fontWeight="bold">Rating</Typography>
-                    <Typography>{anime.score}</Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="body1" fontWeight="bold">Aired</Typography>
-                    <Typography>{anime.aired}</Typography>
+          <Box display="flex" flexDirection="column" gap={3}>
+            {animeList.map((anime, idx) => (
+              <Box
+                key={idx}
+                p={3}
+                border="1px solid #ccc"
+                borderRadius="20px"
+                bgcolor="white"
+                display="flex"
+                gap={3}
+                alignItems="flex-start"
+              >
+                <Box flexShrink={0}>
+                  <img
+                    src={anime["Image URL"]}
+                    alt={anime.Name}
+                    style={{
+                      width: '120px',
+                      height: '170px',
+                      objectFit: 'cover',
+                      borderRadius: '10px',
+                      border: '1px solid #ddd'
+                    }}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/fallback-image.jpg';
+                    }}
+                  />
+                </Box>
+                <Box flexGrow={1}>
+                  <Typography variant="h6">{anime.Name}</Typography>
+                  <Typography variant="body2" color="textSecondary" mb={2}>
+                    {anime.Synopsis?.slice(0, 200)}...
+                  </Typography>
+                  <Box display="flex" justifyContent="space-between" textAlign="center">
+                    <Box>
+                      <Typography variant="body1" fontWeight="bold">Rating</Typography>
+                      <Typography>{anime.Score}</Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="body1" fontWeight="bold">Aired</Typography>
+                      <Typography>{anime.Aired}</Typography>
+                    </Box>
                   </Box>
                 </Box>
               </Box>
-            ))
+            ))}
+          </Box>
+
+          {/* Pagination */}
+          {totalCount > PAGE_SIZE && (
+            <Box mt={4} display="flex" justifyContent="center">
+              <Pagination
+                count={Math.ceil(totalCount / PAGE_SIZE)}
+                page={page}
+                onChange={(_, val) => setPage(val)}
+                color="primary"
+                size="large"
+              />
+            </Box>
           )}
         </Box>
-
-        {/* Pagination */}
-        {totalCount > PAGE_SIZE && (
-          <Box mt={4} display="flex" justifyContent="center">
-            <Pagination
-              count={Math.ceil(totalCount / PAGE_SIZE)}
-              page={page}
-              onChange={(_, val) => setPage(val)}
-              color="primary"
-              size="large"
-            />
-          </Box>
-        )}
       </Box>
     </Box>
   );

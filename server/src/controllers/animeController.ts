@@ -1,12 +1,14 @@
 import { Request, Response } from 'express';
 import Anime from '../models/Anime';
 
+// GET /api/anime (with filters, sorting, deduplication, pagination)
+
 export const getAllAnime = async (req: Request, res: Response): Promise<void> => {
   try {
     const {
       anime1,
       anime2,
-      sort = 'score',
+      sort = 'Score',
       order = 'desc',
       beforeYear,
       afterYear,
@@ -20,62 +22,88 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
     const pageNumber = parseInt(page as string) || 1;
     const pageSize = parseInt(limit as string) || 25;
 
-    // Construct MongoDB filter
     const filter: any = {};
 
-    if (anime1 || anime2) {
-      filter.title = { $in: [anime1, anime2].filter(Boolean) };
+    // Anime 1 and 2 name matching
+    const nameFilters = [anime1, anime2]
+      .filter(Boolean)
+      .map((name) => ({
+        Name: { $regex: `^${name}$`, $options: 'i' }
+      }));
+    if (nameFilters.length > 0) {
+      filter.$or = nameFilters;
     }
 
-    if (beforeYear || afterYear) {
-      filter.aired = {};
-      if (afterYear) filter.aired.$gte = new RegExp(`${afterYear}`);
-      if (beforeYear) filter.aired.$lte = new RegExp(`${beforeYear}`);
+    // AND Conditions for Aired, Season, Score
+    const andConditions: any[] = [];
+
+    if (afterYear) {
+      andConditions.push({ Aired: { $regex: `${afterYear}`, $options: 'i' } });
+    }
+
+    if (beforeYear) {
+      andConditions.push({ Aired: { $regex: `${beforeYear}`, $options: 'i' } });
     }
 
     if (season) {
-      filter.aired = {
-        ...filter.aired,
-        $regex: new RegExp(`${season}`, 'i'),
-      };
+      andConditions.push({ Premiered: { $regex: `${season}`, $options: 'i' } });
     }
 
-    if (minRating || maxRating) {
-      filter.score = {};
-      if (minRating) filter.score.$gte = parseFloat(minRating as string);
-      if (maxRating) filter.score.$lte = parseFloat(maxRating as string);
+    if (minRating !== undefined || maxRating !== undefined) {
+      const scoreCond: any = {};
+      if (minRating) scoreCond.$gte = parseFloat(minRating as string);
+      if (maxRating) scoreCond.$lte = parseFloat(maxRating as string);
+      andConditions.push({ Score: scoreCond });
     }
 
-    const sortField = sort as string;
+    if (andConditions.length > 0) {
+      if (!filter.$and) filter.$and = [];
+      filter.$and.push(...andConditions);
+    }
+
+    const sortMap: Record<string, string> = {
+      score: 'Score',
+      aired: 'Aired',
+      popularity: 'Popularity',
+      episodes: 'Episodes',
+      duration: 'Duration',
+      favorites: 'Favorites',
+      ranked: 'Rank',
+      members: 'Members'
+    };
+
+    const sortField = sortMap[sort.toString().toLowerCase()] || 'Score';
     const sortOrder: 1 | -1 = order === 'asc' ? 1 : -1;
 
-    // Deduplicate by lowercase title before pagination
+    // Main paginated query
     const animeList = await Anime.aggregate([
       { $match: filter },
       {
         $group: {
-          _id: { $toLower: "$title" }, // case-insensitive deduplication
-          doc: { $first: "$$ROOT" },
-        },
+          _id: { $toLower: "$Name" },
+          doc: { $first: "$$ROOT" }
+        }
       },
       { $replaceRoot: { newRoot: "$doc" } },
       { $sort: { [sortField]: sortOrder } },
       { $skip: (pageNumber - 1) * pageSize },
-      { $limit: pageSize },
-    ]);
+      { $limit: pageSize }
+    ]).allowDiskUse(true);
 
-    // Total count of unique titles (before pagination)
-    const totalUnique = await Anime.aggregate([
-      { $match: filter },
-      {
-        $group: {
-          _id: { $toLower: "$title" },
+    // Total count (only calculated when needed)
+    let total = 0;
+    if (pageNumber === 1) {
+      const countAgg = await Anime.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: { $toLower: "$Name" }
+          }
         },
-      },
-      { $count: "total" },
-    ]);
-
-    const total = totalUnique[0]?.total || 0;
+        { $count: "total" }
+      ]);
+      total = countAgg[0]?.total || 0;
+    }
 
     res.status(200).json({ results: animeList, total });
   } catch (err) {
@@ -91,24 +119,22 @@ export const getAnimeTitles = async (req: Request, res: Response): Promise<void>
     const searchQuery = (req.query.q as string) || '';
 
     const filter = searchQuery
-      ? { title: { $regex: searchQuery, $options: 'i' } }
+      ? { Name: { $regex: searchQuery, $options: 'i' } }
       : {};
 
-    // Step 1: Find matching documents with title + popularity
-    const animeList = await Anime.find(filter, { title: 1, popularity: 1, _id: 0 })
-      .sort({ popularity: 1 }) // most popular first
-      .limit(100)              // fetch more than needed to ensure unique trimming
+    const animeList = await Anime.find(filter, { Name: 1, Popularity: 1, _id: 0 })
+      .sort({ Popularity: 1 })
+      .limit(100)
       .lean();
 
-    // Step 2: Remove duplicate titles (case-insensitive)
     const seen = new Set<string>();
     const uniqueTitles = [];
 
     for (const anime of animeList) {
-      const key = anime.title.toLowerCase().trim();
+      const key = anime.Name.toLowerCase().trim();
       if (!seen.has(key)) {
         seen.add(key);
-        uniqueTitles.push({ label: anime.title.trim() });
+        uniqueTitles.push({ label: anime.Name.trim() });
       }
       if (uniqueTitles.length === limit) break;
     }
@@ -120,17 +146,18 @@ export const getAnimeTitles = async (req: Request, res: Response): Promise<void>
   }
 };
 
-
+// POST /api/anime
 export const createAnime = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const anime = new Anime(req.body);
-      const savedAnime = await anime.save();
-      res.status(201).json(savedAnime);
-    } catch (error) {
-      res.status(400).json({ message: 'Error creating anime.' });
-    }
-  };
-  
+  try {
+    const anime = new Anime(req.body);
+    const savedAnime = await anime.save();
+    res.status(201).json(savedAnime);
+  } catch (error) {
+    res.status(400).json({ message: 'Error creating anime.' });
+  }
+};
+
+// GET /api/anime/:id
 export const getAnimeById = async (req: Request, res: Response): Promise<void> => {
   try {
     const anime = await Anime.findById(req.params.id);
@@ -143,30 +170,20 @@ export const getAnimeById = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({ message: 'Error retrieving anime.' });
   }
 };
-  
+
+// GET /api/anime/popular
 export const getAnimeSortedByPopularity = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Determine the sort order based on query parameter
-    // 'asc' means lower popularity values come first (more popular), 'desc' is the reverse
     const order = req.query.order === 'asc' ? 1 : -1;
-
-    // Determine the maximum number of anime entries to return (capped at 100)
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
 
-    // Query the Anime collection
-    // - No filter: fetches all anime
-    // - Sorted by the 'popularity' field in specified order
-    // - Limited to 'limit' results
     const sortedAnime = await Anime.find()
-      .sort({ popularity: order })
+      .sort({ Popularity: order })
       .limit(limit)
-      .lean(); // .lean() improves read performance by returning plain JS objects
+      .lean();
 
-    // Send the sorted list in the response
     res.status(200).json(sortedAnime);
-
   } catch (err) {
-    // In case of an error during query execution, log it and return a 500 error
     console.error("Error sorting anime by popularity:", err);
     res.status(500).json({ message: 'Failed to fetch sorted anime list.' });
   }
