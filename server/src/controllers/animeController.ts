@@ -46,16 +46,43 @@ export const createAnime = async (req: Request, res: Response): Promise<void> =>
     }
   };
   
-  export const getAnimeById = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const anime = await Anime.findById(req.params.id);
-      if (!anime) {
-        res.status(404).json({ message: 'Anime not found.' });
-        return;
-      }
-      res.status(200).json(anime);
-    } catch (error) {
-      res.status(500).json({ message: 'Error retrieving anime.' });
+export const getAnimeById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const anime = await Anime.findById(req.params.id);
+    if (!anime) {
+      res.status(404).json({ message: 'Anime not found.' });
+      return;
     }
-  };
+    res.status(200).json(anime);
+  } catch (error) {
+    res.status(500).json({ message: 'Error retrieving anime.' });
+  }
+};
   
+export const getAnimeSortedByPopularity = async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Determine the sort order based on query parameter
+    // 'asc' means lower popularity values come first (more popular), 'desc' is the reverse
+    const order = req.query.order === 'asc' ? 1 : -1;
+
+    // Determine the maximum number of anime entries to return (capped at 100)
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+
+    // Query the Anime collection
+    // - No filter: fetches all anime
+    // - Sorted by the 'popularity' field in specified order
+    // - Limited to 'limit' results
+    const sortedAnime = await Anime.find()
+      .sort({ popularity: order })
+      .limit(limit)
+      .lean(); // .lean() improves read performance by returning plain JS objects
+
+    // Send the sorted list in the response
+    res.status(200).json(sortedAnime);
+
+  } catch (err) {
+    // In case of an error during query execution, log it and return a 500 error
+    console.error("Error sorting anime by popularity:", err);
+    res.status(500).json({ message: 'Failed to fetch sorted anime list.' });
+  }
+};
