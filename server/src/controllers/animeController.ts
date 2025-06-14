@@ -13,24 +13,26 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
       season,
       minRating,
       maxRating,
+      page = '1',
+      limit = '25',
     } = req.query;
 
-    // Construct filter
+    const pageNumber = parseInt(page as string) || 1;
+    const pageSize = parseInt(limit as string) || 25;
+
+    // Construct MongoDB filter
     const filter: any = {};
 
-    // Match selected titles
     if (anime1 || anime2) {
       filter.title = { $in: [anime1, anime2].filter(Boolean) };
     }
 
-    // Year filter
     if (beforeYear || afterYear) {
       filter.aired = {};
       if (afterYear) filter.aired.$gte = new RegExp(`${afterYear}`);
       if (beforeYear) filter.aired.$lte = new RegExp(`${beforeYear}`);
     }
 
-    // Season (e.g., "Spring", "Winter", etc.)
     if (season) {
       filter.aired = {
         ...filter.aired,
@@ -38,39 +40,49 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
       };
     }
 
-    // Score filter
     if (minRating || maxRating) {
       filter.score = {};
       if (minRating) filter.score.$gte = parseFloat(minRating as string);
       if (maxRating) filter.score.$lte = parseFloat(maxRating as string);
     }
 
-    // Sorting logic
-    const sortField: string = (sort as string) || 'score';
+    const sortField = sort as string;
     const sortOrder: 1 | -1 = order === 'asc' ? 1 : -1;
 
-    const animeList = await Anime.find(filter)
-      .sort({ [sortField]: sortOrder })
-      .lean();
+    // Deduplicate by lowercase title before pagination
+    const animeList = await Anime.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: { $toLower: "$title" }, // case-insensitive deduplication
+          doc: { $first: "$$ROOT" },
+        },
+      },
+      { $replaceRoot: { newRoot: "$doc" } },
+      { $sort: { [sortField]: sortOrder } },
+      { $skip: (pageNumber - 1) * pageSize },
+      { $limit: pageSize },
+    ]);
 
-    // Remove duplicate anime by UID or title (case-insensitive)
-    const seen = new Set<string>();
-    const uniqueAnime = [];
+    // Total count of unique titles (before pagination)
+    const totalUnique = await Anime.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: { $toLower: "$title" },
+        },
+      },
+      { $count: "total" },
+    ]);
 
-    for (const anime of animeList) {
-      const key = String(anime.uid || anime.title).toLowerCase().trim();
-      if (!seen.has(key)) {
-        seen.add(key);
-        uniqueAnime.push(anime);
-      }
-    }
+    const total = totalUnique[0]?.total || 0;
 
-    res.status(200).json(uniqueAnime);
+    res.status(200).json({ results: animeList, total });
   } catch (err) {
     console.error('❌ Error fetching anime list:', err);
     res.status(500).json({ message: 'Failed to fetch anime list' });
   }
-};  
+};
 
 // GET /api/anime/titles
 export const getAnimeTitles = async (req: Request, res: Response): Promise<void> => {
@@ -85,7 +97,7 @@ export const getAnimeTitles = async (req: Request, res: Response): Promise<void>
     // Step 1: Find matching documents with title + popularity
     const animeList = await Anime.find(filter, { title: 1, popularity: 1, _id: 0 })
       .sort({ popularity: 1 }) // most popular first
-      .limit(200)              // fetch more than needed to ensure unique trimming
+      .limit(100)              // fetch more than needed to ensure unique trimming
       .lean();
 
     // Step 2: Remove duplicate titles (case-insensitive)

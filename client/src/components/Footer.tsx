@@ -6,16 +6,14 @@ const Footer: React.FC = () => {
     <Box
       component="footer"
       sx={{
-        backgroundColor: '#1e1e1e',
-        color: 'white',
-        textAlign: 'center',
+        backgroundColor: '#222',
+        color: '#fff',
         py: 2,
         mt: 'auto',
+        textAlign: 'center',
       }}
     >
-      <Typography variant="body2">
-        © {new Date().getFullYear()} AniMatch. All rights reserved.
-      </Typography>
+      <Typography variant="body2">© 2025 AniMatch. All rights reserved.</Typography>
     </Box>
   );
 };

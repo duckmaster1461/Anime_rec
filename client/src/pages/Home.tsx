@@ -80,28 +80,26 @@ const Home: React.FC = () => {
 
     navigate('/result', {
       state: {
-        anime1: typeof selectedAnime1 === 'string' ? selectedAnime1.trim() : selectedAnime1?.label.trim(),
-        anime2: typeof selectedAnime2 === 'string' ? selectedAnime2.trim() : selectedAnime2?.label.trim(),
-      },
+        anime1: label1,
+        anime2: label2
+      }
     });
   };
 
   return (
     <Box
       sx={{
-        height: 'calc(100vh - 128px)',
-        width: '100vw',
-        overflow: 'hidden',
-        position: 'relative',
+        height: '100%',
+        width: '100%',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
         justifyContent: 'center',
-        textAlign: 'center',
+        alignItems: 'center',
         px: 3,
+        overflow: 'hidden',
       }}
     >
-      {/* Background */}
+      {/* Background gradient */}
       <Box
         sx={{
           position: 'absolute',
@@ -114,15 +112,15 @@ const Home: React.FC = () => {
         }}
       />
 
-      <Typography variant="h2" sx={{ fontWeight: 'bold', mb: 2, color: '#222' }}>
+      <Typography variant="h2" sx={{ fontWeight: 'bold', mb: 1, color: '#222' }}>
         AniMatch
       </Typography>
 
-      <Typography variant="h6" sx={{ mb: 4, color: '#444', fontWeight: 600 }}>
+      <Typography variant="h6" sx={{ mb: 3, color: '#444', fontWeight: 600 }}>
         Find animes that match your liking!
       </Typography>
 
-      <Box display="flex" gap={2} flexDirection={{ xs: 'column', md: 'row' }} mb={4}>
+      <Box display="flex" gap={2} flexDirection={{ xs: 'column', md: 'row' }} mb={3}>
         <Autocomplete
           freeSolo
           options={options1.filter(opt => {
@@ -134,9 +132,7 @@ const Home: React.FC = () => {
           onInputChange={(_, value) => debouncedFetch1(value)}
           value={selectedAnime1}
           onChange={(_, value) => setSelectedAnime1(value)}
-          getOptionLabel={(option) =>
-            typeof option === 'string' ? option : option.label
-          }
+          getOptionLabel={(option) => typeof option === 'string' ? option : option.label}
           sx={{ width: { xs: '100%', md: '300px' }, bgcolor: 'white' }}
           renderInput={(params) => (
             <TextField
@@ -167,9 +163,7 @@ const Home: React.FC = () => {
           onInputChange={(_, value) => debouncedFetch2(value)}
           value={selectedAnime2}
           onChange={(_, value) => setSelectedAnime2(value)}
-          getOptionLabel={(option) =>
-            typeof option === 'string' ? option : option.label
-          }
+          getOptionLabel={(option) => typeof option === 'string' ? option : option.label}
           sx={{ width: { xs: '100%', md: '300px' }, bgcolor: 'white' }}
           renderInput={(params) => (
             <TextField

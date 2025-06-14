@@ -5,7 +5,7 @@ import debounce from 'lodash.debounce';
 import CircularProgress from '@mui/material/CircularProgress';
 import {
   Box, Typography, TextField, Autocomplete, Button, Slider,
-  Radio, RadioGroup, FormControlLabel, FormLabel, Select, MenuItem
+  Radio, RadioGroup, FormControlLabel, FormLabel, Select, MenuItem, Pagination
 } from '@mui/material';
 
 interface Anime {
@@ -14,6 +14,8 @@ interface Anime {
   score: number;
   aired: string;
 }
+
+const PAGE_SIZE = 25;
 
 const Result: React.FC = () => {
   const location = useLocation();
@@ -33,6 +35,8 @@ const Result: React.FC = () => {
   const [rating, setRating] = useState<number[]>([0, 10]);
   const [sortField, setSortField] = useState('score');
   const [animeList, setAnimeList] = useState<Anime[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
 
   const fetchTitles = async (query: string, setter: any, setLoading: any) => {
     if (!query) return setter([]);
@@ -52,14 +56,7 @@ const Result: React.FC = () => {
   const debouncedFetch1 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions1, setLoading1), 300), []);
   const debouncedFetch2 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions2, setLoading2), 300), []);
 
-  const fetchResults = async () => {
-    const hasAnime = anime1?.trim() || anime2?.trim();
-
-    if (!hasAnime) {
-      setAnimeList([{ title: '', synopsis: '', score: -1, aired: '' }]);
-      return;
-    }
-
+  const fetchResults = async (pageOverride = page) => {
     try {
       const res = await axios.get('http://localhost:5000/api/anime', {
         params: {
@@ -71,10 +68,13 @@ const Result: React.FC = () => {
           afterYear,
           season,
           minRating: rating[0],
-          maxRating: rating[1]
+          maxRating: rating[1],
+          page: pageOverride,
+          limit: PAGE_SIZE,
         }
       });
-      setAnimeList(res.data);
+      setAnimeList(res.data.results);
+      setTotalCount(res.data.total || 0); // Backend must return total count
     } catch (err) {
       console.error('Failed to fetch anime list', err);
     }
@@ -82,7 +82,12 @@ const Result: React.FC = () => {
 
   useEffect(() => {
     fetchResults();
-  }, []); // optionally run initially
+  }, [page]); // fetch on page change
+
+  const handleSearch = () => {
+    setPage(1);
+    fetchResults(1);
+  };
 
   return (
     <Box display="flex" height="calc(100vh - 128px)">
@@ -98,31 +103,13 @@ const Result: React.FC = () => {
       >
         <Box>
           <Typography variant="h6" gutterBottom>Release Year</Typography>
-          <TextField
-            label="Before"
-            variant="outlined"
-            fullWidth
-            margin="dense"
-            value={beforeYear}
-            onChange={(e) => setBeforeYear(e.target.value)}
-          />
-          <TextField
-            label="After"
-            variant="outlined"
-            fullWidth
-            margin="dense"
-            value={afterYear}
-            onChange={(e) => setAfterYear(e.target.value)}
-          />
+          <TextField label="Before" fullWidth margin="dense" value={beforeYear} onChange={(e) => setBeforeYear(e.target.value)} />
+          <TextField label="After" fullWidth margin="dense" value={afterYear} onChange={(e) => setAfterYear(e.target.value)} />
         </Box>
 
         <Box>
           <FormLabel component="legend">Season</FormLabel>
-          <RadioGroup
-            row
-            value={season}
-            onChange={(e) => setSeason(e.target.value)}
-          >
+          <RadioGroup row value={season} onChange={(e) => setSeason(e.target.value)}>
             {['Spring', 'Summer', 'Autumn', 'Winter'].map((s) => (
               <FormControlLabel key={s} value={s} control={<Radio />} label={s} />
             ))}
@@ -131,31 +118,19 @@ const Result: React.FC = () => {
 
         <Box>
           <Typography gutterBottom>Rating</Typography>
-          <Slider
-            value={rating}
-            onChange={(_, val) => setRating(val as number[])}
-            valueLabelDisplay="auto"
-            min={0}
-            max={10}
-          />
+          <Slider value={rating} onChange={(_, val) => setRating(val as number[])} valueLabelDisplay="auto" min={0} max={10} />
         </Box>
 
         <Box>
           <Typography gutterBottom>Sort by</Typography>
-          <Select
-            value={sortField}
-            onChange={(e) => setSortField(e.target.value)}
-            fullWidth
-          >
+          <Select value={sortField} onChange={(e) => setSortField(e.target.value)} fullWidth>
             <MenuItem value="score">Rating</MenuItem>
             <MenuItem value="aired">Release Year</MenuItem>
             <MenuItem value="popularity">Popularity</MenuItem>
           </Select>
         </Box>
 
-        <Button variant="contained" onClick={fetchResults}>
-          Search
-        </Button>
+        <Button variant="contained" onClick={handleSearch}>Search</Button>
       </Box>
 
       {/* Main Content */}
@@ -171,21 +146,16 @@ const Result: React.FC = () => {
               debouncedFetch1(val);
             }}
             loading={loading1}
-            getOptionLabel={(option) => typeof option === 'string' ? option : option.label}
             renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Anime 1"
-                InputProps={{
-                  ...params.InputProps,
-                  endAdornment: (
-                    <>
-                      {loading1 ? <CircularProgress size={20} /> : null}
-                      {params.InputProps.endAdornment}
-                    </>
-                  ),
-                }}
-              />
+              <TextField {...params} label="Anime 1" InputProps={{
+                ...params.InputProps,
+                endAdornment: (
+                  <>
+                    {loading1 ? <CircularProgress size={20} /> : null}
+                    {params.InputProps.endAdornment}
+                  </>
+                )
+              }} />
             )}
             sx={{ width: 300 }}
           />
@@ -200,60 +170,39 @@ const Result: React.FC = () => {
               debouncedFetch2(val);
             }}
             loading={loading2}
-            getOptionLabel={(option) => typeof option === 'string' ? option : option.label}
             renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Anime 2"
-                InputProps={{
-                  ...params.InputProps,
-                  endAdornment: (
-                    <>
-                      {loading2 ? <CircularProgress size={20} /> : null}
-                      {params.InputProps.endAdornment}
-                    </>
-                  ),
-                }}
-              />
+              <TextField {...params} label="Anime 2" InputProps={{
+                ...params.InputProps,
+                endAdornment: (
+                  <>
+                    {loading2 ? <CircularProgress size={20} /> : null}
+                    {params.InputProps.endAdornment}
+                  </>
+                )
+              }} />
             )}
             sx={{ width: 300 }}
           />
 
-          <Button variant="contained" onClick={fetchResults} sx={{ borderRadius: 5, px: 4 }}>
+          <Button variant="contained" onClick={handleSearch} sx={{ borderRadius: 5, px: 4 }}>
             Search
           </Button>
         </Box>
 
         <Typography variant="h5" fontWeight="bold" mb={2}>
-          Found {animeList.length} result{animeList.length !== 1 && 's'}!
+          Found {animeList?.length || 0} result{animeList?.length !== 1 ? 's' : ''}!
         </Typography>
 
         <Box display="flex" flexDirection="column" gap={3}>
-          {animeList.length === 1 && animeList[0].score === -1 ? (
-            <Box
-              p={3}
-              border="1px dashed #999"
-              borderRadius="20px"
-              bgcolor="#fdfdfd"
-              display="flex"
-              justifyContent="center"
-              alignItems="center"
-            >
+          {animeList.length === 0 ? (
+            <Box p={3} border="1px dashed #999" borderRadius="20px" bgcolor="#fdfdfd" textAlign="center">
               <Typography variant="h6" color="textSecondary">
-                Please select at least one anime to search.
+                No anime found for this filter. Try adjusting your search.
               </Typography>
             </Box>
           ) : (
             animeList.map((anime, idx) => (
-              <Box
-                key={idx}
-                p={3}
-                border="1px solid #ccc"
-                borderRadius="20px"
-                bgcolor="white"
-                display="flex"
-                flexDirection="column"
-              >
+              <Box key={idx} p={3} border="1px solid #ccc" borderRadius="20px" bgcolor="white" display="flex" flexDirection="column">
                 <Typography variant="h6">{anime.title}</Typography>
                 <Typography variant="body2" color="textSecondary" mb={2}>
                   {anime.synopsis?.slice(0, 200)}...
@@ -272,6 +221,19 @@ const Result: React.FC = () => {
             ))
           )}
         </Box>
+
+        {/* Pagination */}
+        {totalCount > PAGE_SIZE && (
+          <Box mt={4} display="flex" justifyContent="center">
+            <Pagination
+              count={Math.ceil(totalCount / PAGE_SIZE)}
+              page={page}
+              onChange={(_, val) => setPage(val)}
+              color="primary"
+              size="large"
+            />
+          </Box>
+        )}
       </Box>
     </Box>
   );
