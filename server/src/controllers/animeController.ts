@@ -2,16 +2,75 @@ import { Request, Response } from 'express';
 import Anime from '../models/Anime';
 
 export const getAllAnime = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const animeList = await Anime.find();
-      console.log("🎯 Found anime list:", animeList);
-      res.status(200).json(animeList);
-    } catch (err) {
-      console.error("❌ Error fetching anime list:", err);
-      res.status(500).json({ message: 'Failed to fetch anime list' });
+  try {
+    const {
+      anime1,
+      anime2,
+      sort = 'score',
+      order = 'desc',
+      beforeYear,
+      afterYear,
+      season,
+      minRating,
+      maxRating,
+    } = req.query;
+
+    // Construct filter
+    const filter: any = {};
+
+    // Match selected titles
+    if (anime1 || anime2) {
+      filter.title = { $in: [anime1, anime2].filter(Boolean) };
     }
-  };
-  
+
+    // Year filter
+    if (beforeYear || afterYear) {
+      filter.aired = {};
+      if (afterYear) filter.aired.$gte = new RegExp(`${afterYear}`);
+      if (beforeYear) filter.aired.$lte = new RegExp(`${beforeYear}`);
+    }
+
+    // Season (e.g., "Spring", "Winter", etc.)
+    if (season) {
+      filter.aired = {
+        ...filter.aired,
+        $regex: new RegExp(`${season}`, 'i'),
+      };
+    }
+
+    // Score filter
+    if (minRating || maxRating) {
+      filter.score = {};
+      if (minRating) filter.score.$gte = parseFloat(minRating as string);
+      if (maxRating) filter.score.$lte = parseFloat(maxRating as string);
+    }
+
+    // Sorting logic
+    const sortField: string = (sort as string) || 'score';
+    const sortOrder: 1 | -1 = order === 'asc' ? 1 : -1;
+
+    const animeList = await Anime.find(filter)
+      .sort({ [sortField]: sortOrder })
+      .lean();
+
+    // Remove duplicate anime by UID or title (case-insensitive)
+    const seen = new Set<string>();
+    const uniqueAnime = [];
+
+    for (const anime of animeList) {
+      const key = String(anime.uid || anime.title).toLowerCase().trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueAnime.push(anime);
+      }
+    }
+
+    res.status(200).json(uniqueAnime);
+  } catch (err) {
+    console.error('❌ Error fetching anime list:', err);
+    res.status(500).json({ message: 'Failed to fetch anime list' });
+  }
+};  
 
 // GET /api/anime/titles
 export const getAnimeTitles = async (req: Request, res: Response): Promise<void> => {

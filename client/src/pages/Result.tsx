@@ -1,14 +1,89 @@
-import React from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import axios from 'axios';
+import debounce from 'lodash.debounce';
+import CircularProgress from '@mui/material/CircularProgress';
 import {
   Box, Typography, TextField, Autocomplete, Button, Slider,
   Radio, RadioGroup, FormControlLabel, FormLabel, Select, MenuItem
 } from '@mui/material';
 
-const animeOptions = [
-  { label: 'Naruto' }, { label: 'Bleach' }, { label: 'Attack on Titan' }
-];
+interface Anime {
+  title: string;
+  synopsis: string;
+  score: number;
+  aired: string;
+}
 
 const Result: React.FC = () => {
+  const location = useLocation();
+  const defaultAnime1 = (location.state as any)?.anime1 || '';
+  const defaultAnime2 = (location.state as any)?.anime2 || '';
+
+  const [anime1, setAnime1] = useState<string | null>(defaultAnime1);
+  const [anime2, setAnime2] = useState<string | null>(defaultAnime2);
+  const [options1, setOptions1] = useState<{ label: string }[]>([]);
+  const [options2, setOptions2] = useState<{ label: string }[]>([]);
+  const [loading1, setLoading1] = useState(false);
+  const [loading2, setLoading2] = useState(false);
+
+  const [beforeYear, setBeforeYear] = useState('');
+  const [afterYear, setAfterYear] = useState('');
+  const [season, setSeason] = useState('');
+  const [rating, setRating] = useState<number[]>([0, 10]);
+  const [sortField, setSortField] = useState('score');
+  const [animeList, setAnimeList] = useState<Anime[]>([]);
+
+  const fetchTitles = async (query: string, setter: any, setLoading: any) => {
+    if (!query) return setter([]);
+    try {
+      setLoading(true);
+      const res = await axios.get('http://localhost:5000/api/anime/titles', {
+        params: { q: query, limit: 10 },
+      });
+      setter(res.data);
+    } catch (err) {
+      console.error('Failed to fetch titles', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const debouncedFetch1 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions1, setLoading1), 300), []);
+  const debouncedFetch2 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions2, setLoading2), 300), []);
+
+  const fetchResults = async () => {
+    const hasAnime = anime1?.trim() || anime2?.trim();
+
+    if (!hasAnime) {
+      setAnimeList([{ title: '', synopsis: '', score: -1, aired: '' }]);
+      return;
+    }
+
+    try {
+      const res = await axios.get('http://localhost:5000/api/anime', {
+        params: {
+          anime1,
+          anime2,
+          sort: sortField,
+          order: 'desc',
+          beforeYear,
+          afterYear,
+          season,
+          minRating: rating[0],
+          maxRating: rating[1]
+        }
+      });
+      setAnimeList(res.data);
+    } catch (err) {
+      console.error('Failed to fetch anime list', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchResults();
+  }, []); // optionally run initially
+
   return (
     <Box display="flex" height="calc(100vh - 128px)">
       {/* Sidebar */}
@@ -23,24 +98,42 @@ const Result: React.FC = () => {
       >
         <Box>
           <Typography variant="h6" gutterBottom>Release Year</Typography>
-          <TextField label="Before" variant="outlined" fullWidth margin="dense" />
-          <TextField label="After" variant="outlined" fullWidth margin="dense" />
+          <TextField
+            label="Before"
+            variant="outlined"
+            fullWidth
+            margin="dense"
+            value={beforeYear}
+            onChange={(e) => setBeforeYear(e.target.value)}
+          />
+          <TextField
+            label="After"
+            variant="outlined"
+            fullWidth
+            margin="dense"
+            value={afterYear}
+            onChange={(e) => setAfterYear(e.target.value)}
+          />
         </Box>
 
         <Box>
           <FormLabel component="legend">Season</FormLabel>
-          <RadioGroup row defaultValue="Spring">
-            <FormControlLabel value="Spring" control={<Radio />} label="Spring" />
-            <FormControlLabel value="Summer" control={<Radio />} label="Summer" />
-            <FormControlLabel value="Autumn" control={<Radio />} label="Autumn" />
-            <FormControlLabel value="Winter" control={<Radio />} label="Winter" />
+          <RadioGroup
+            row
+            value={season}
+            onChange={(e) => setSeason(e.target.value)}
+          >
+            {['Spring', 'Summer', 'Autumn', 'Winter'].map((s) => (
+              <FormControlLabel key={s} value={s} control={<Radio />} label={s} />
+            ))}
           </RadioGroup>
         </Box>
 
         <Box>
           <Typography gutterBottom>Rating</Typography>
           <Slider
-            defaultValue={[0, 10]}
+            value={rating}
+            onChange={(_, val) => setRating(val as number[])}
             valueLabelDisplay="auto"
             min={0}
             max={10}
@@ -49,73 +142,135 @@ const Result: React.FC = () => {
 
         <Box>
           <Typography gutterBottom>Sort by</Typography>
-          <Select defaultValue="rating" fullWidth>
-            <MenuItem value="rating">Rating</MenuItem>
-            <MenuItem value="year">Release Year</MenuItem>
-            <MenuItem value="season">Season</MenuItem>
+          <Select
+            value={sortField}
+            onChange={(e) => setSortField(e.target.value)}
+            fullWidth
+          >
+            <MenuItem value="score">Rating</MenuItem>
+            <MenuItem value="aired">Release Year</MenuItem>
+            <MenuItem value="popularity">Popularity</MenuItem>
           </Select>
         </Box>
+
+        <Button variant="contained" onClick={fetchResults}>
+          Search
+        </Button>
       </Box>
 
       {/* Main Content */}
       <Box flexGrow={1} p={4} overflow="auto">
-        {/* Top search row */}
-        <Box display="flex" alignItems="center" gap={2} mb={4}>
-          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-            Found 12 results!
-          </Typography>
-        </Box>
-
         <Box display="flex" gap={2} mb={4}>
           <Autocomplete
-            options={animeOptions}
-            getOptionLabel={(opt) => opt.label}
-            renderInput={(params) => <TextField {...params} label="Anime 1" />}
+            freeSolo
+            options={options1.filter(opt => opt.label !== anime2)}
+            value={anime1}
+            onChange={(_, val) => setAnime1(typeof val === 'string' ? val : val?.label || '')}
+            onInputChange={(_, val) => {
+              setAnime1(val);
+              debouncedFetch1(val);
+            }}
+            loading={loading1}
+            getOptionLabel={(option) => typeof option === 'string' ? option : option.label}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Anime 1"
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (
+                    <>
+                      {loading1 ? <CircularProgress size={20} /> : null}
+                      {params.InputProps.endAdornment}
+                    </>
+                  ),
+                }}
+              />
+            )}
             sx={{ width: 300 }}
           />
+
           <Autocomplete
-            options={animeOptions}
-            getOptionLabel={(opt) => opt.label}
-            renderInput={(params) => <TextField {...params} label="Anime 2" />}
+            freeSolo
+            options={options2.filter(opt => opt.label !== anime1)}
+            value={anime2}
+            onChange={(_, val) => setAnime2(typeof val === 'string' ? val : val?.label || '')}
+            onInputChange={(_, val) => {
+              setAnime2(val);
+              debouncedFetch2(val);
+            }}
+            loading={loading2}
+            getOptionLabel={(option) => typeof option === 'string' ? option : option.label}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Anime 2"
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (
+                    <>
+                      {loading2 ? <CircularProgress size={20} /> : null}
+                      {params.InputProps.endAdornment}
+                    </>
+                  ),
+                }}
+              />
+            )}
             sx={{ width: 300 }}
           />
-          <Button variant="contained" sx={{ borderRadius: 5, px: 4 }}>
+
+          <Button variant="contained" onClick={fetchResults} sx={{ borderRadius: 5, px: 4 }}>
             Search
           </Button>
         </Box>
 
-        {/* Anime cards */}
+        <Typography variant="h5" fontWeight="bold" mb={2}>
+          Found {animeList.length} result{animeList.length !== 1 && 's'}!
+        </Typography>
+
         <Box display="flex" flexDirection="column" gap={3}>
-          {[1, 2].map((_, idx) => (
+          {animeList.length === 1 && animeList[0].score === -1 ? (
             <Box
-              key={idx}
               p={3}
-              border="1px solid #ccc"
+              border="1px dashed #999"
               borderRadius="20px"
-              bgcolor="white"
+              bgcolor="#fdfdfd"
               display="flex"
-              flexDirection="column"
+              justifyContent="center"
+              alignItems="center"
             >
-              <Typography variant="h6">Anime name</Typography>
-              <Typography variant="body2" color="textSecondary" mb={2}>
-                Short anime description
+              <Typography variant="h6" color="textSecondary">
+                Please select at least one anime to search.
               </Typography>
-              <Box display="flex" justifyContent="space-between" textAlign="center">
-                <Box>
-                  <Typography variant="body1" fontWeight="bold">Rating</Typography>
-                  <Typography>9.9</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="body1" fontWeight="bold">Release Year</Typography>
-                  <Typography>1308</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="body1" fontWeight="bold">Season</Typography>
-                  <Typography>Summer</Typography>
+            </Box>
+          ) : (
+            animeList.map((anime, idx) => (
+              <Box
+                key={idx}
+                p={3}
+                border="1px solid #ccc"
+                borderRadius="20px"
+                bgcolor="white"
+                display="flex"
+                flexDirection="column"
+              >
+                <Typography variant="h6">{anime.title}</Typography>
+                <Typography variant="body2" color="textSecondary" mb={2}>
+                  {anime.synopsis?.slice(0, 200)}...
+                </Typography>
+                <Box display="flex" justifyContent="space-between" textAlign="center">
+                  <Box>
+                    <Typography variant="body1" fontWeight="bold">Rating</Typography>
+                    <Typography>{anime.score}</Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="body1" fontWeight="bold">Aired</Typography>
+                    <Typography>{anime.aired}</Typography>
+                  </Box>
                 </Box>
               </Box>
-            </Box>
-          ))}
+            ))
+          )}
         </Box>
       </Box>
     </Box>

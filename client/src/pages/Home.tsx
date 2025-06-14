@@ -78,7 +78,12 @@ const Home: React.FC = () => {
       return;
     }
 
-    navigate('/result');
+    navigate('/result', {
+      state: {
+        anime1: typeof selectedAnime1 === 'string' ? selectedAnime1.trim() : selectedAnime1?.label.trim(),
+        anime2: typeof selectedAnime2 === 'string' ? selectedAnime2.trim() : selectedAnime2?.label.trim(),
+      },
+    });
   };
 
   return (
