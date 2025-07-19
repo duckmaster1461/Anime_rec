@@ -4,8 +4,8 @@ import axios from 'axios';
 import debounce from 'lodash.debounce';
 import CircularProgress from '@mui/material/CircularProgress';
 import {
-  Box, Typography, TextField, Autocomplete, Button, Pagination,
-  Slider, RadioGroup, Radio, FormControlLabel, FormLabel, Select, MenuItem
+  Box, Typography, TextField, Autocomplete, Button,
+  Slider, FormControlLabel, FormLabel, Select, MenuItem
 } from '@mui/material';
 
 interface Anime {
@@ -16,7 +16,7 @@ interface Anime {
   "Image URL": string;
 }
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 50; // used for API limit
 
 const Result: React.FC = () => {
   const location = useLocation();
@@ -36,8 +36,6 @@ const Result: React.FC = () => {
   const [rating, setRating] = useState<number[]>([0, 10]);
   const [sortField, setSortField] = useState('Score');
   const [animeList, setAnimeList] = useState<Anime[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(1);
 
   const fetchTitles = async (query: string, setter: any, setLoading: any) => {
     if (!query) return setter([]);
@@ -58,32 +56,29 @@ const Result: React.FC = () => {
   const debouncedFetch2 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions2, setLoading2), 300), []);
 
   const sortMap: Record<string, string> = {
-  Score: 'score',
-  Aired: 'aired',
-  Popularity: 'popularity',
-  Episodes: 'episodes',
-  Duration: 'duration',
-  Favorites: 'favorites',
-  Ranked: 'ranked',
-  Members: 'members'
-};
+    Score: 'score',
+    Aired: 'aired',
+    Popularity: 'popularity',
+    Episodes: 'episodes',
+    Duration: 'duration',
+    Favorites: 'favorites',
+    Ranked: 'ranked',
+    Members: 'members'
+  };
 
-const fetchResults = async (pageOverride = page) => {
-  try {
-    const res = await axios.get('http://localhost:5000/api/anime', {
-      params: {
-        page: pageOverride,
-        limit: PAGE_SIZE,
-        sort: sortMap[sortField] || 'score',
-      }
-    });
-    setAnimeList(res.data.results);
-    setTotalCount(res.data.total || 0);
-  } catch (err) {
-    console.error('❌ Failed to fetch anime list', err);
-  }
-};
-
+  const fetchResults = async () => {
+    try {
+      const res = await axios.get('http://localhost:5000/api/anime', {
+        params: {
+          limit: 50,
+          sort: sortMap[sortField] || 'score',
+        }
+      });
+      setAnimeList(res.data.results);
+    } catch (err) {
+      console.error('❌ Failed to fetch anime list', err);
+    }
+  };
 
   const handleResetFilters = () => {
     setBeforeYear('');
@@ -91,49 +86,96 @@ const fetchResults = async (pageOverride = page) => {
     setSeason('');
     setRating([0, 10]);
     setSortField('Score');
-    setPage(1);
-    fetchResults(1);
+    fetchResults();
   };
 
+  // Fetch on mount and when sort changes
   useEffect(() => {
     fetchResults();
-  }, [page, sortField]);
+  }, [sortField]);
 
   return (
-    <Box display="flex" height="calc(100vh - 128px)">
+    <Box
+      display="flex"
+      height="calc(100vh - 128px)"
+      sx={{
+        background: 'linear-gradient(to top left, rgb(180, 63, 47) 0%, rgb(114, 80, 173) 50%, rgb(84, 151, 193) 100%)'
+      }}
+    >
       {/* Sidebar Filters */}
       <Box
         width="300px"
         p={3}
-        bgcolor="#f9f9f9"
-        borderRight="1px solid #ddd"
+        bgcolor="transparent"
+        borderRight="0px solid #ddd"
         display="flex"
         flexDirection="column"
         gap={4}
+        sx={{
+          backdropFilter: 'blur(2px)',
+          color: '#fff',
+          textShadow: '0 1px 6px rgba(0,0,0,0.5)',
+          fontWeight: 500
+        }}
       >
         <Box>
-          <Typography variant="h6" gutterBottom>Release Year</Typography>
-          <TextField label="Before" fullWidth margin="dense" value={beforeYear} onChange={(e) => setBeforeYear(e.target.value)} />
-          <TextField label="After" fullWidth margin="dense" value={afterYear} onChange={(e) => setAfterYear(e.target.value)} />
+          <Typography variant="h6" gutterBottom sx={{ color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>Release Year</Typography>
+          <TextField
+            label="Before"
+            fullWidth
+            margin="dense"
+            value={beforeYear}
+            onChange={(e) => setBeforeYear(e.target.value)}
+            InputLabelProps={{ style: { color: '#fff' } }}
+            InputProps={{ style: { color: '#fff' } }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+          '& fieldset': { borderColor: '#fff' },
+          '&:hover fieldset': { borderColor: '#fff' },
+          '&.Mui-focused fieldset': { borderColor: '#fff' },
+              },
+              '& .MuiInputLabel-root': { color: '#fff' }
+            }}
+          />
+          <TextField
+            label="After"
+            fullWidth
+            margin="dense"
+            value={afterYear}
+            onChange={(e) => setAfterYear(e.target.value)}
+            InputLabelProps={{ style: { color: '#fff' } }}
+            InputProps={{ style: { color: '#fff' } }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+          '& fieldset': { borderColor: '#fff' },
+          '&:hover fieldset': { borderColor: '#fff' },
+          '&.Mui-focused fieldset': { borderColor: '#fff' },
+              },
+              '& .MuiInputLabel-root': { color: '#fff' }
+            }}
+          />
         </Box>
 
         <Box>
-          <FormLabel component="legend">Season</FormLabel>
-          <RadioGroup row value={season} onChange={(e) => setSeason(e.target.value)}>
-            {['Spring', 'Summer', 'Autumn', 'Winter'].map((s) => (
-              <FormControlLabel key={s} value={s} control={<Radio />} label={s} />
-            ))}
-          </RadioGroup>
+          <Typography variant='h6' gutterBottom sx={{ color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>Rating</Typography>
+          <Slider
+            value={rating}
+            onChange={(_, val) => setRating(val as number[])}
+            valueLabelDisplay="auto"
+            min={0.0}
+            max={10.0}
+            sx={{ color: 'rgb(0, 26, 255)' }}
+          />
         </Box>
 
         <Box>
-          <Typography gutterBottom>Rating</Typography>
-          <Slider value={rating} onChange={(_, val) => setRating(val as number[])} valueLabelDisplay="auto" min={0} max={10} />
-        </Box>
-
-        <Box>
-          <Typography gutterBottom>Sort by</Typography>
-          <Select value={sortField} onChange={(e) => setSortField(e.target.value)} fullWidth>
+          <Typography variant='h6' gutterBottom sx={{ color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>Sort by</Typography>
+          <Select
+            value={sortField}
+            onChange={(e) => setSortField(e.target.value)}
+            fullWidth
+            sx={{ color: '#fff', '.MuiOutlinedInput-notchedOutline': { borderColor: '#fff' }, '.MuiSvgIcon-root': { color: '#fff' } }}
+          >
             <MenuItem value="Score">Rating</MenuItem>
             <MenuItem value="Aired">Release Year</MenuItem>
             <MenuItem value="Popularity">Popularity</MenuItem>
@@ -145,44 +187,46 @@ const fetchResults = async (pageOverride = page) => {
           </Select>
         </Box>
 
-        <Button variant="outlined" onClick={handleResetFilters}>Reset Filters</Button>
+        <Button variant="outlined" onClick={handleResetFilters} sx={{ color: '#fff', borderColor: '#fff' }}>
+          Reset Filters
+        </Button>
       </Box>
 
       {/* Main Content */}
-      <Box flexGrow={1} p={0} display="flex" flexDirection="column" height="100%">
+      <Box flexGrow={1} display="flex" flexDirection="column" height="100%">
         {/* Sticky Search Bar */}
         <Box
           position="sticky"
           top={0}
           zIndex={10}
-          bgcolor="white"
+          bgcolor="transparent"
           p={3}
-          borderBottom="1px solid #ddd"
           display="flex"
           gap={2}
+          sx={{ backdropFilter: 'blur(2px)', color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}
         >
           <Autocomplete
             freeSolo
             options={options1.filter(opt => opt.label !== anime2)}
             value={anime1}
             onChange={(_, val) => setAnime1(typeof val === 'string' ? val : val?.label || '')}
-            onInputChange={(_, val) => {
-              setAnime1(val);
-              debouncedFetch1(val);
-            }}
+            onInputChange={(_, val) => { setAnime1(val); debouncedFetch1(val); }}
             loading={loading1}
             renderInput={(params) => (
-              <TextField {...params} label="Anime 1" InputProps={{
-                ...params.InputProps,
-                endAdornment: (
-                  <>
-                    {loading1 ? <CircularProgress size={20} /> : null}
-                    {params.InputProps.endAdornment}
-                  </>
-                )
-              }} />
+              <TextField
+                {...params}
+                label="Anime 1"
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (
+                    <> {loading1 ? <CircularProgress size={20}/> : null} {params.InputProps.endAdornment} </>
+                  ),
+                  style: { color: '#fff' }
+                }}
+                InputLabelProps={{ style: { color: '#fff' } }}
+                sx={{ width: 300 }}
+              />
             )}
-            sx={{ width: 300 }}
           />
 
           <Autocomplete
@@ -190,100 +234,61 @@ const fetchResults = async (pageOverride = page) => {
             options={options2.filter(opt => opt.label !== anime1)}
             value={anime2}
             onChange={(_, val) => setAnime2(typeof val === 'string' ? val : val?.label || '')}
-            onInputChange={(_, val) => {
-              setAnime2(val);
-              debouncedFetch2(val);
-            }}
+            onInputChange={(_, val) => { setAnime2(val); debouncedFetch2(val); }}
             loading={loading2}
             renderInput={(params) => (
-              <TextField {...params} label="Anime 2" InputProps={{
-                ...params.InputProps,
-                endAdornment: (
-                  <>
-                    {loading2 ? <CircularProgress size={20} /> : null}
-                    {params.InputProps.endAdornment}
-                  </>
-                )
-              }} />
+              <TextField
+                {...params}
+                label="Anime 2"
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (
+                    <> {loading2 ? <CircularProgress size={20}/> : null} {params.InputProps.endAdornment} </>
+                  ),
+                  style: { color: '#fff' }
+                }}
+                InputLabelProps={{ style: { color: '#fff' } }}
+                sx={{ width: 300 }}
+              />
             )}
-            sx={{ width: 300 }}
           />
-          {/* TODO */}
-          <Button
-  variant="contained"
-  color="primary"  
->
-  Search
-</Button>
-
+          <Button variant="contained" color="primary" sx={{ fontWeight: 600, boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
+            Search
+          </Button>
         </Box>
 
         {/* Anime List */}
-        <Box flexGrow={1} overflow="auto" p={4}>
-          <Typography variant="h5" fontWeight="bold" mb={2}>
+        <Box
+          flexGrow={1}
+          overflow="auto"
+          p={4}
+          sx={{
+            '&::-webkit-scrollbar': { width: '16px', background: 'transparent' },
+            '&::-webkit-scrollbar-thumb': { background: 'rgba(255,255,255,0.08)', borderRadius: '16px' },
+            scrollbarColor: 'rgba(255,255,255,0.08) transparent', scrollbarWidth: 'thin'
+          }}
+        >
+          <Typography variant="h5" fontWeight="bold" mb={2} sx={{ color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>
             Found {animeList?.length || 0} result{animeList?.length !== 1 ? 's' : ''}!
           </Typography>
 
           <Box display="flex" flexDirection="column" gap={3}>
             {animeList.map((anime, idx) => (
-              <Box
-                key={idx}
-                p={3}
-                border="1px solid #ccc"
-                borderRadius="20px"
-                bgcolor="white"
-                display="flex"
-                gap={3}
-                alignItems="flex-start"
-              >
+              <Box key={idx} p={3} border="2px solid #ccc" borderRadius="20px" bgcolor="transparent" display="flex" gap={3} alignItems="flex-start" sx={{ backgroundColor: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(2px)' }}>
                 <Box flexShrink={0}>
-                  <img
-                    src={anime["Image URL"]}
-                    alt={anime.Name}
-                    style={{
-                      width: '120px',
-                      height: '170px',
-                      objectFit: 'cover',
-                      borderRadius: '10px',
-                      border: '1px solid #ddd'
-                    }}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/fallback-image.jpg';
-                    }}
-                  />
+                  <img src={anime["Image URL"]} alt={anime.Name} style={{ width: '120px', height: '170px', objectFit: 'cover', borderRadius: '10px' }} onError={(e) => { (e.target as HTMLImageElement).src = '/fallback-image.jpg'; }} />
                 </Box>
                 <Box flexGrow={1}>
                   <Typography variant="h6">{anime.Name}</Typography>
-                  <Typography variant="body2" color="textSecondary" mb={2}>
-                    {anime.Synopsis?.slice(0, 200)}...
-                  </Typography>
+                  <Typography variant="body2" color="textSecondary" mb={2}>{anime.Synopsis?.slice(0, 200)}...</Typography>
                   <Box display="flex" justifyContent="space-between" textAlign="center">
-                    <Box>
-                      <Typography variant="body1" fontWeight="bold">Rating</Typography>
-                      <Typography>{anime.Score}</Typography>
-                    </Box>
-                    <Box>
-                      <Typography variant="body1" fontWeight="bold">Aired</Typography>
-                      <Typography>{anime.Aired}</Typography>
-                    </Box>
+                    <Box><Typography variant="body1" fontWeight="bold">Rating</Typography><Typography>{anime.Score}</Typography></Box>
+                    <Box><Typography variant="body1" fontWeight="bold">Aired</Typography><Typography>{anime.Aired}</Typography></Box>
                   </Box>
                 </Box>
               </Box>
             ))}
           </Box>
-
-          {/* Pagination */}
-          {totalCount > PAGE_SIZE && (
-            <Box mt={4} display="flex" justifyContent="center">
-              <Pagination
-                count={Math.ceil(totalCount / PAGE_SIZE)}
-                page={page}
-                onChange={(_, val) => setPage(val)}
-                color="primary"
-                size="large"
-              />
-            </Box>
-          )}
         </Box>
       </Box>
     </Box>

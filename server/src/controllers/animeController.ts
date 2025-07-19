@@ -16,7 +16,7 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
       minRating,
       maxRating,
       page = '1',
-      limit = '25',
+      limit = '',
     } = req.query;
 
     const pageNumber = parseInt(page as string) || 1;
