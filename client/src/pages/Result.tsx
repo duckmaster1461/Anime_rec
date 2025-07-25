@@ -51,59 +51,66 @@ const Result: React.FC = () => {
   const fetchTitles = async (query: string, setter: any, setLoading: any) => {
     if (!query) return setter([]);
     try {
+      console.log(`🔍 Fetching title options for: "${query}"`);
       setLoading(true);
       const res = await axios.get('http://localhost:5000/api/anime/titles', {
         params: { q: query, limit: 10 },
       });
+      console.log('✅ Title options:', res.data);
       setter(res.data);
     } catch (err) {
-      console.error('Failed to fetch titles', err);
+      console.error('❌ Failed to fetch titles:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const debouncedFetch1 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions1, setLoading1), 300), []);
-  const debouncedFetch2 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions2, setLoading2), 300), []);
+  const debouncedFetch1 = useMemo(() =>
+    debounce((q: string) => fetchTitles(q, setOptions1, setLoading1), 300), []);
 
+  const debouncedFetch2 = useMemo(() =>
+    debounce((q: string) => fetchTitles(q, setOptions2, setLoading2), 300), []);
 
   const fetchResults = useCallback(async () => {
+    const queryParams = {
+      anime1,
+      anime2,
+      beforeYear,
+      afterYear,
+      season,
+      minRating: rating[0],
+      maxRating: rating[1],
+      sort: sortMap[sortField] || 'score',
+      order: 'desc',
+      limit: 50,
+    };
+
+    console.log('🚀 Fetching anime results with filters:', queryParams);
+
     try {
       const res = await axios.get('http://localhost:5000/api/anime', {
-        params: {
-          anime1,
-          anime2,
-          beforeYear,
-          afterYear,
-          season,
-          minRating: rating[0],
-          maxRating: rating[1],
-          sort: sortMap[sortField] || 'score',
-          order: 'desc',
-          limit: 50,
-        },
+        params: queryParams,
       });
+      console.log(`✅ Retrieved ${res.data?.results?.length || 0} anime`);
       setAnimeList(res.data.results);
     } catch (err) {
-      console.error('❌ Failed to fetch anime list', err);
+      console.error('❌ Failed to fetch anime list:', err);
     }
   }, [anime1, anime2, beforeYear, afterYear, season, rating, sortField]);
 
-
   const handleResetFilters = () => {
+    console.log('🔄 Resetting filters');
     setBeforeYear('');
     setAfterYear('');
     setSeason('');
     setRating([0, 10]);
     setSortField('Score');
-    fetchResults();
   };
 
-  // Fetch on mount and when sort changes
   useEffect(() => {
+    console.log('📡 useEffect triggered');
     fetchResults();
-  }, [fetchResults]);
-
+  }, [anime1, anime2, sortField, beforeYear, afterYear, season, rating, fetchResults]);
 
   return (
     <Box

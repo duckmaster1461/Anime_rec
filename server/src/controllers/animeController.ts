@@ -1,8 +1,6 @@
 import { Request, Response } from 'express';
 import Anime from '../models/Anime';
 
-// GET /api/anime (with filters, sorting, deduplication, pagination)
-
 export const getAllAnime = async (req: Request, res: Response): Promise<void> => {
   try {
     const {
@@ -23,8 +21,6 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
     const pageSize = parseInt(limit as string) || 25;
 
     const filter: any = {};
-
-    // Compare mode: exact name match
     const nameFilters = [anime1, anime2]
       .filter(Boolean)
       .map((name) => ({
@@ -36,11 +32,9 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
       filter.$or = nameFilters;
     }
 
-    // Only apply filters when NOT in compare mode
     const andConditions: any[] = [];
 
     if (!isCompareMode) {
-      // Year filter using $expr
       if (afterYear || beforeYear) {
         const exprConditions: any[] = [];
 
@@ -69,27 +63,27 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
         });
       }
 
-      // Season filter
       if (season) {
         andConditions.push({
           Premiered: { $regex: `${season}`, $options: 'i' }
         });
       }
 
-      // Rating filter
       if (minRating !== undefined || maxRating !== undefined) {
         const scoreCond: any = {};
-        if (minRating) scoreCond.$gte = parseFloat(minRating as string);
-        if (maxRating) scoreCond.$lte = parseFloat(maxRating as string);
+        if (minRating !== undefined) scoreCond.$gte = parseFloat(minRating as string);
+        if (maxRating !== undefined) scoreCond.$lte = parseFloat(maxRating as string);
         andConditions.push({ Score: scoreCond });
       }
     }
 
-    // Append all AND conditions
     if (andConditions.length > 0) {
       if (!filter.$and) filter.$and = [];
       filter.$and.push(...andConditions);
     }
+
+    console.log('📥 Query Params:', req.query);
+    console.log('🔍 Filter Object:', JSON.stringify(filter, null, 2));
 
     const sortMap: Record<string, string> = {
       score: 'Score',
@@ -105,7 +99,8 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
     const sortField = sortMap[sort.toString().toLowerCase()] || 'Score';
     const sortOrder: 1 | -1 = order === 'asc' ? 1 : -1;
 
-    // Aggregation pipeline
+    console.log(`📊 Sorting by: ${sortField} (${sortOrder === 1 ? 'asc' : 'desc'})`);
+
     const basePipeline = [
       { $match: filter },
       {
@@ -125,12 +120,12 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
           { $limit: pageSize }
         ];
 
-    const animeList = await Anime.aggregate([
-      ...basePipeline,
-      ...paginationStages
-    ]).allowDiskUse(true);
+    const fullPipeline = [...basePipeline, ...paginationStages];
+    console.log('🧱 Aggregation Pipeline:', JSON.stringify(fullPipeline, null, 2));
 
-    // Total count (only calculated when not in compare mode)
+    const animeList = await Anime.aggregate(fullPipeline).allowDiskUse(true);
+    console.log(`✅ Retrieved ${animeList.length} anime`);
+
     let total = 0;
     if (!isCompareMode && pageNumber === 1) {
       const countAgg = await Anime.aggregate([
@@ -143,6 +138,7 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
         { $count: "total" }
       ]);
       total = countAgg[0]?.total || 0;
+      console.log(`📦 Total distinct anime count: ${total}`);
     }
 
     res.status(200).json({ results: animeList, total });
