@@ -16,7 +16,7 @@ interface Anime {
   "Image URL": string;
 }
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 50;
 
 const Result: React.FC = () => {
   const location = useLocation();
