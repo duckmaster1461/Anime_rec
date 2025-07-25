@@ -1,11 +1,11 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import debounce from 'lodash.debounce';
 import CircularProgress from '@mui/material/CircularProgress';
 import {
   Box, Typography, TextField, Autocomplete, Button,
-  Slider, FormControlLabel, FormLabel, Select, MenuItem
+  Slider, Select, MenuItem
 } from '@mui/material';
 
 interface Anime {
@@ -16,7 +16,18 @@ interface Anime {
   "Image URL": string;
 }
 
-const PAGE_SIZE = 50; // used for API limit
+//const PAGE_SIZE = 50; // used for API limit
+
+const sortMap: Record<string, string> = {
+  Score: 'score',
+  Aired: 'aired',
+  Popularity: 'popularity',
+  Episodes: 'episodes',
+  Duration: 'duration',
+  Favorites: 'favorites',
+  Ranked: 'ranked',
+  Members: 'members'
+};
 
 const Result: React.FC = () => {
   const location = useLocation();
@@ -55,30 +66,29 @@ const Result: React.FC = () => {
   const debouncedFetch1 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions1, setLoading1), 300), []);
   const debouncedFetch2 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions2, setLoading2), 300), []);
 
-  const sortMap: Record<string, string> = {
-    Score: 'score',
-    Aired: 'aired',
-    Popularity: 'popularity',
-    Episodes: 'episodes',
-    Duration: 'duration',
-    Favorites: 'favorites',
-    Ranked: 'ranked',
-    Members: 'members'
-  };
 
-  const fetchResults = async () => {
+  const fetchResults = useCallback(async () => {
     try {
       const res = await axios.get('http://localhost:5000/api/anime', {
         params: {
-          limit: 50,
+          anime1,
+          anime2,
+          beforeYear,
+          afterYear,
+          season,
+          minRating: rating[0],
+          maxRating: rating[1],
           sort: sortMap[sortField] || 'score',
-        }
+          order: 'desc',
+          limit: 50,
+        },
       });
       setAnimeList(res.data.results);
     } catch (err) {
       console.error('❌ Failed to fetch anime list', err);
     }
-  };
+  }, [anime1, anime2, beforeYear, afterYear, season, rating, sortField]);
+
 
   const handleResetFilters = () => {
     setBeforeYear('');
@@ -92,7 +102,8 @@ const Result: React.FC = () => {
   // Fetch on mount and when sort changes
   useEffect(() => {
     fetchResults();
-  }, [sortField]);
+  }, [fetchResults]);
+
 
   return (
     <Box
@@ -252,7 +263,12 @@ const Result: React.FC = () => {
               />
             )}
           />
-          <Button variant="contained" color="primary" sx={{ fontWeight: 600, boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={fetchResults}
+            sx={{ fontWeight: 600, boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
+          >
             Search
           </Button>
         </Box>

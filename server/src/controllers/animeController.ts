@@ -24,38 +24,68 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
 
     const filter: any = {};
 
-    // Anime 1 and 2 name matching
+    // Compare mode: exact name match
     const nameFilters = [anime1, anime2]
       .filter(Boolean)
       .map((name) => ({
         Name: { $regex: `^${name}$`, $options: 'i' }
       }));
-    if (nameFilters.length > 0) {
+
+    const isCompareMode = nameFilters.length > 0;
+    if (isCompareMode) {
       filter.$or = nameFilters;
     }
 
-    // AND Conditions for Aired, Season, Score
+    // Only apply filters when NOT in compare mode
     const andConditions: any[] = [];
 
-    if (afterYear) {
-      andConditions.push({ Aired: { $regex: `${afterYear}`, $options: 'i' } });
+    if (!isCompareMode) {
+      // Year filter using $expr
+      if (afterYear || beforeYear) {
+        const exprConditions: any[] = [];
+
+        if (afterYear) {
+          exprConditions.push({
+            $gte: [
+              { $toInt: { $substr: ["$Aired", 0, 4] } },
+              parseInt(afterYear as string)
+            ]
+          });
+        }
+
+        if (beforeYear) {
+          exprConditions.push({
+            $lte: [
+              { $toInt: { $substr: ["$Aired", 0, 4] } },
+              parseInt(beforeYear as string)
+            ]
+          });
+        }
+
+        andConditions.push({
+          $expr: {
+            $and: exprConditions
+          }
+        });
+      }
+
+      // Season filter
+      if (season) {
+        andConditions.push({
+          Premiered: { $regex: `${season}`, $options: 'i' }
+        });
+      }
+
+      // Rating filter
+      if (minRating !== undefined || maxRating !== undefined) {
+        const scoreCond: any = {};
+        if (minRating) scoreCond.$gte = parseFloat(minRating as string);
+        if (maxRating) scoreCond.$lte = parseFloat(maxRating as string);
+        andConditions.push({ Score: scoreCond });
+      }
     }
 
-    if (beforeYear) {
-      andConditions.push({ Aired: { $regex: `${beforeYear}`, $options: 'i' } });
-    }
-
-    if (season) {
-      andConditions.push({ Premiered: { $regex: `${season}`, $options: 'i' } });
-    }
-
-    if (minRating !== undefined || maxRating !== undefined) {
-      const scoreCond: any = {};
-      if (minRating) scoreCond.$gte = parseFloat(minRating as string);
-      if (maxRating) scoreCond.$lte = parseFloat(maxRating as string);
-      andConditions.push({ Score: scoreCond });
-    }
-
+    // Append all AND conditions
     if (andConditions.length > 0) {
       if (!filter.$and) filter.$and = [];
       filter.$and.push(...andConditions);
@@ -75,8 +105,8 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
     const sortField = sortMap[sort.toString().toLowerCase()] || 'Score';
     const sortOrder: 1 | -1 = order === 'asc' ? 1 : -1;
 
-    // Main paginated query
-    const animeList = await Anime.aggregate([
+    // Aggregation pipeline
+    const basePipeline = [
       { $match: filter },
       {
         $group: {
@@ -85,14 +115,24 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
         }
       },
       { $replaceRoot: { newRoot: "$doc" } },
-      { $sort: { [sortField]: sortOrder } },
-      { $skip: (pageNumber - 1) * pageSize },
-      { $limit: pageSize }
+      { $sort: { [sortField]: sortOrder } }
+    ];
+
+    const paginationStages = isCompareMode
+      ? []
+      : [
+          { $skip: (pageNumber - 1) * pageSize },
+          { $limit: pageSize }
+        ];
+
+    const animeList = await Anime.aggregate([
+      ...basePipeline,
+      ...paginationStages
     ]).allowDiskUse(true);
 
-    // Total count (only calculated when needed)
+    // Total count (only calculated when not in compare mode)
     let total = 0;
-    if (pageNumber === 1) {
+    if (!isCompareMode && pageNumber === 1) {
       const countAgg = await Anime.aggregate([
         { $match: filter },
         {
@@ -111,6 +151,7 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
     res.status(500).json({ message: 'Failed to fetch anime list' });
   }
 };
+
 
 // GET /api/anime/titles
 export const getAnimeTitles = async (req: Request, res: Response): Promise<void> => {
