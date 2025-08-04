@@ -20,66 +20,88 @@ export const getAllAnime = async (req: Request, res: Response): Promise<void> =>
     const pageNumber = parseInt(page as string) || 1;
     const pageSize = parseInt(limit as string) || 25;
 
-    const filter: any = {};
-    const nameFilters = [anime1, anime2]
-      .filter(Boolean)
-      .map((name) => ({
-        Name: { $regex: `^${name}$`, $options: 'i' }
-      }));
+    const isAnime1Set = typeof anime1 === 'string' && anime1.trim() !== '';
+    const isAnime2Set = typeof anime2 === 'string' && anime2.trim() !== '';
+    const isCompareMode = isAnime1Set || isAnime2Set;
 
-    const isCompareMode = nameFilters.length > 0;
+    const filter: any = {};
     if (isCompareMode) {
+      const nameFilters = [];
+      if (isAnime1Set) {
+        nameFilters.push({ Name: { $regex: `^${anime1}$`, $options: 'i' } });
+      }
+      if (isAnime2Set) {
+        nameFilters.push({ Name: { $regex: `^${anime2}$`, $options: 'i' } });
+      }
       filter.$or = nameFilters;
     }
 
     const andConditions: any[] = [];
 
     if (!isCompareMode) {
+      // Year range
       if (afterYear || beforeYear) {
         const exprConditions: any[] = [];
 
+        const extractYearExpr = {
+          $cond: [
+            { $regexMatch: { input: "$Aired", regex: "[0-9]{4}" } },
+            {
+              $toInt: {
+                $arrayElemAt: [
+                  {
+                    $map: {
+                      input: {
+                        $filter: {
+                          input: { $split: ["$Aired", " "] },
+                          cond: { $regexMatch: { input: "$$this", regex: "^[0-9]{4}$" } }
+                        }
+                      },
+                      as: "y",
+                      in: "$$y"
+                    }
+                  },
+                  0
+                ]
+              }
+            },
+            null
+          ]
+        };
+
         if (afterYear) {
           exprConditions.push({
-            $gte: [
-              { $toInt: { $substr: ["$Aired", 0, 4] } },
-              parseInt(afterYear as string)
-            ]
+            $gte: [extractYearExpr, parseInt(afterYear as string)]
           });
         }
 
         if (beforeYear) {
           exprConditions.push({
-            $lte: [
-              { $toInt: { $substr: ["$Aired", 0, 4] } },
-              parseInt(beforeYear as string)
-            ]
+            $lte: [extractYearExpr, parseInt(beforeYear as string)]
           });
         }
 
-        andConditions.push({
-          $expr: {
-            $and: exprConditions
-          }
-        });
+        if (exprConditions.length > 0) {
+          andConditions.push({ $expr: { $and: exprConditions } });
+        }
       }
 
+      // Season filter
       if (season) {
-        andConditions.push({
-          Premiered: { $regex: `${season}`, $options: 'i' }
-        });
+        andConditions.push({ Premiered: { $regex: `${season}`, $options: 'i' } });
       }
 
+      // Rating filter
       if (minRating !== undefined || maxRating !== undefined) {
         const scoreCond: any = {};
         if (minRating !== undefined) scoreCond.$gte = parseFloat(minRating as string);
         if (maxRating !== undefined) scoreCond.$lte = parseFloat(maxRating as string);
         andConditions.push({ Score: scoreCond });
       }
-    }
 
-    if (andConditions.length > 0) {
-      if (!filter.$and) filter.$and = [];
-      filter.$and.push(...andConditions);
+      if (andConditions.length > 0) {
+        filter.$and = andConditions;
+      }
     }
 
     console.log('📥 Query Params:', req.query);
