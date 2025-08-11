@@ -2,11 +2,14 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import debounce from 'lodash.debounce';
-import CircularProgress from '@mui/material/CircularProgress';
 import {
   Box, Typography, TextField, Autocomplete, Button, Pagination,
-  Slider, RadioGroup, Radio, FormControlLabel, FormLabel, Select, MenuItem
+  Slider, RadioGroup, Radio, FormControlLabel, FormLabel, Select, MenuItem,
+  CircularProgress, Grid, Card, CardActionArea, CardMedia, CardContent,
+  Chip, Stack, Tooltip, Accordion, AccordionSummary, AccordionDetails, Skeleton
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 
 interface Anime {
   Name: string;
@@ -35,9 +38,22 @@ const Result: React.FC = () => {
   const [season, setSeason] = useState('');
   const [rating, setRating] = useState<number[]>([0, 10]);
   const [sortField, setSortField] = useState('Score');
+
   const [animeList, setAnimeList] = useState<Anime[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
+  const [loadingList, setLoadingList] = useState(false);
+
+  const sortMap: Record<string, string> = {
+    Score: 'score',
+    Aired: 'aired',
+    Popularity: 'popularity',
+    Episodes: 'episodes',
+    Duration: 'duration',
+    Favorites: 'favorites',
+    Ranked: 'ranked',
+    Members: 'members'
+  };
 
   const fetchTitles = async (query: string, setter: any, setLoading: any) => {
     if (!query) return setter([]);
@@ -56,34 +72,39 @@ const Result: React.FC = () => {
 
   const debouncedFetch1 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions1, setLoading1), 300), []);
   const debouncedFetch2 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions2, setLoading2), 300), []);
+  useEffect(() => () => { debouncedFetch1.cancel(); debouncedFetch2.cancel(); }, [debouncedFetch1, debouncedFetch2]);
 
-  const sortMap: Record<string, string> = {
-  Score: 'score',
-  Aired: 'aired',
-  Popularity: 'popularity',
-  Episodes: 'episodes',
-  Duration: 'duration',
-  Favorites: 'favorites',
-  Ranked: 'ranked',
-  Members: 'members'
-};
-
-const fetchResults = async (pageOverride = page) => {
-  try {
-    const res = await axios.get('http://localhost:5000/api/anime', {
-      params: {
+  const fetchResults = async (pageOverride = page) => {
+    try {
+      setLoadingList(true);
+      const params: any = {
         page: pageOverride,
         limit: PAGE_SIZE,
         sort: sortMap[sortField] || 'score',
-      }
-    });
-    setAnimeList(res.data.results);
-    setTotalCount(res.data.total || 0);
-  } catch (err) {
-    console.error('❌ Failed to fetch anime list', err);
-  }
-};
+        order: 'desc', // or state-driven
+        // filters
+        beforeYear: beforeYear || undefined,
+        afterYear: afterYear || undefined,
+        season: season || undefined,
+        minRating: rating?.[0] ?? undefined,
+        maxRating: rating?.[1] ?? undefined,
+        // keep legacy keys for now (can remove once BE fully updated)
+        minScore: rating?.[0] ?? undefined,
+        maxScore: rating?.[1] ?? undefined,
+        // search (independent)
+        anime1: anime1 || undefined,
+        anime2: anime2 || undefined,
+      };
 
+      const res = await axios.get('http://localhost:5000/api/anime', { params });
+      setAnimeList(res.data.results || []);
+      setTotalCount(res.data.total || 0);
+    } catch (err) {
+      console.error('❌ Failed to fetch anime list', err);
+    } finally {
+      setLoadingList(false);
+    }
+  };
 
   const handleResetFilters = () => {
     setBeforeYear('');
@@ -95,186 +116,281 @@ const fetchResults = async (pageOverride = page) => {
     fetchResults(1);
   };
 
+  const handleSearch = () => {
+    setPage(1);
+    fetchResults(1);
+  };
+
   useEffect(() => {
     fetchResults();
   }, [page, sortField]);
 
-  return (
-    <Box display="flex" height="calc(100vh - 128px)">
-      {/* Sidebar Filters */}
-      <Box
-        width="300px"
-        p={3}
-        bgcolor="#f9f9f9"
-        borderRight="1px solid #ddd"
-        display="flex"
-        flexDirection="column"
-        gap={4}
-      >
-        <Box>
-          <Typography variant="h6" gutterBottom>Release Year</Typography>
-          <TextField label="Before" fullWidth margin="dense" value={beforeYear} onChange={(e) => setBeforeYear(e.target.value)} />
-          <TextField label="After" fullWidth margin="dense" value={afterYear} onChange={(e) => setAfterYear(e.target.value)} />
-        </Box>
-
-        <Box>
-          <FormLabel component="legend">Season</FormLabel>
-          <RadioGroup row value={season} onChange={(e) => setSeason(e.target.value)}>
-            {['Spring', 'Summer', 'Autumn', 'Winter'].map((s) => (
-              <FormControlLabel key={s} value={s} control={<Radio />} label={s} />
-            ))}
-          </RadioGroup>
-        </Box>
-
-        <Box>
-          <Typography gutterBottom>Rating</Typography>
-          <Slider value={rating} onChange={(_, val) => setRating(val as number[])} valueLabelDisplay="auto" min={0} max={10} />
-        </Box>
-
-        <Box>
-          <Typography gutterBottom>Sort by</Typography>
-          <Select value={sortField} onChange={(e) => setSortField(e.target.value)} fullWidth>
-            <MenuItem value="Score">Rating</MenuItem>
-            <MenuItem value="Aired">Release Year</MenuItem>
-            <MenuItem value="Popularity">Popularity</MenuItem>
-            <MenuItem value="Episodes">Episodes</MenuItem>
-            <MenuItem value="Duration">Duration</MenuItem>
-            <MenuItem value="Favorites">Favorites</MenuItem>
-            <MenuItem value="Ranked">Rank</MenuItem>
-            <MenuItem value="Members">Members</MenuItem>
-          </Select>
-        </Box>
-
-        <Button variant="outlined" onClick={handleResetFilters}>Reset Filters</Button>
+  // shared filter UI (used in sidebar + accordion)
+  const Filters = () => (
+    <Box sx={{ display: 'grid', gap: 2 }}>
+      <Box>
+        <Typography variant="subtitle2" gutterBottom>Release Year</Typography>
+        <Stack direction="row" spacing={1}>
+          <TextField
+            label="After"
+            fullWidth
+            size="small"
+            value={afterYear}
+            onChange={(e) => setAfterYear(e.target.value)}
+            placeholder="e.g. 2015"
+            inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }}
+          />
+          <TextField
+            label="Before"
+            fullWidth
+            size="small"
+            value={beforeYear}
+            onChange={(e) => setBeforeYear(e.target.value)}
+            placeholder="e.g. 2022"
+            inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }}
+          />
+        </Stack>
       </Box>
 
-      {/* Main Content */}
-      <Box flexGrow={1} p={0} display="flex" flexDirection="column" height="100%">
-        {/* Sticky Search Bar */}
+      <Box>
+        <FormLabel component="legend">Season</FormLabel>
+        <RadioGroup row value={season} onChange={(e) => setSeason(e.target.value)}>
+          {['Spring', 'Summer', 'Autumn', 'Winter'].map((s) => (
+            <FormControlLabel key={s} value={s} control={<Radio />} label={s} />
+          ))}
+        </RadioGroup>
+      </Box>
+
+      <Box>
+        <Typography variant="subtitle2" gutterBottom>Rating</Typography>
+        <Slider value={rating} onChange={(_, v) => setRating(v as number[])} valueLabelDisplay="auto" min={0} max={10} />
+      </Box>
+
+      <Box>
+        <Typography variant="subtitle2" gutterBottom>Sort by</Typography>
+        <Select value={sortField} onChange={(e) => setSortField(e.target.value as string)} fullWidth size="small">
+          <MenuItem value="Score">Rating</MenuItem>
+          <MenuItem value="Aired">Release Year</MenuItem>
+          <MenuItem value="Popularity">Popularity</MenuItem>
+          <MenuItem value="Episodes">Episodes</MenuItem>
+          <MenuItem value="Duration">Duration</MenuItem>
+          <MenuItem value="Favorites">Favorites</MenuItem>
+          <MenuItem value="Ranked">Rank</MenuItem>
+          <MenuItem value="Members">Members</MenuItem>
+        </Select>
+      </Box>
+
+      <Stack direction="row" spacing={1}>
+        <Button fullWidth variant="contained" onClick={handleSearch}>Apply</Button>
+        <Button fullWidth variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetFilters}>Reset</Button>
+      </Stack>
+    </Box>
+  );
+
+  const ActiveChips = () => {
+    const chips: { label: string; onDelete: () => void }[] = [];
+    if (anime1) chips.push({ label: `Anime 1: ${anime1}`, onDelete: () => setAnime1('') });
+    if (anime2) chips.push({ label: `Anime 2: ${anime2}`, onDelete: () => setAnime2('') });
+    if (afterYear) chips.push({ label: `After: ${afterYear}`, onDelete: () => setAfterYear('') });
+    if (beforeYear) chips.push({ label: `Before: ${beforeYear}`, onDelete: () => setBeforeYear('') });
+    if (season) chips.push({ label: `Season: ${season}`, onDelete: () => setSeason('') });
+    if (rating[0] !== 0 || rating[1] !== 10) chips.push({ label: `Rating: ${rating[0]}–${rating[1]}`, onDelete: () => setRating([0, 10]) });
+    if (!chips.length) return null;
+    return (
+      <Stack direction="row" spacing={1} sx={{ px: 2, pb: 1, flexWrap: 'wrap', gap: 1 }}>
+        {chips.map((c, i) => <Chip key={i} label={c.label} onDelete={c.onDelete} variant="outlined" size="small" />)}
+      </Stack>
+    );
+  };
+
+  return (
+    // IMPORTANT: height: '100%' + minHeight: 0 let this page scroll within Layout
+    <Box sx={{ display: 'flex', height: '100%', minHeight: 0, bgcolor: 'background.default' }}>
+      {/* Sidebar (desktop) */}
+      <Box
+        sx={{
+          display: { xs: 'none', md: 'block' },
+          width: 320,
+          p: 3,
+          borderRight: '1px solid',
+          borderColor: 'divider',
+          flexShrink: 0,
+          overflow: 'auto',
+        }}
+      >
+        <Typography variant="h6" sx={{ mb: 2 }}>Filters</Typography>
+        <Filters />
+      </Box>
+
+      {/* Main */}
+      <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {/* Filters (mobile) */}
+        <Box sx={{ display: { xs: 'block', md: 'none' }, p: 1 }}>
+          <Accordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography>Filters</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Filters />
+            </AccordionDetails>
+          </Accordion>
+        </Box>
+
+        {/* Sticky search row within page scroll (plays nice with Header) */}
         <Box
-          position="sticky"
-          top={0}
-          zIndex={10}
-          bgcolor="white"
-          p={3}
-          borderBottom="1px solid #ddd"
-          display="flex"
-          gap={2}
+          sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+            bgcolor: 'background.paper',
+            p: 2,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            display: 'flex',
+            gap: 2,
+            flexWrap: 'wrap',
+          }}
         >
           <Autocomplete
             freeSolo
-            options={options1.filter(opt => opt.label !== anime2)}
+            options={options1.filter((opt) => opt.label !== anime2)}
             value={anime1}
             onChange={(_, val) => setAnime1(typeof val === 'string' ? val : val?.label || '')}
-            onInputChange={(_, val) => {
-              setAnime1(val);
-              debouncedFetch1(val);
-            }}
+            onInputChange={(_, val) => { setAnime1(val); debouncedFetch1(val); }}
             loading={loading1}
             renderInput={(params) => (
-              <TextField {...params} label="Anime 1" InputProps={{
-                ...params.InputProps,
-                endAdornment: (
-                  <>
-                    {loading1 ? <CircularProgress size={20} /> : null}
-                    {params.InputProps.endAdornment}
-                  </>
-                )
-              }} />
+              <TextField
+                {...params}
+                label="Anime 1"
+                size="small"
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (<>{loading1 ? <CircularProgress size={18} /> : null}{params.InputProps.endAdornment}</>),
+                }}
+              />
             )}
-            sx={{ width: 300 }}
+            sx={{ width: { xs: '100%', sm: 280, md: 320 } }}
           />
 
           <Autocomplete
             freeSolo
-            options={options2.filter(opt => opt.label !== anime1)}
+            options={options2.filter((opt) => opt.label !== anime1)}
             value={anime2}
             onChange={(_, val) => setAnime2(typeof val === 'string' ? val : val?.label || '')}
-            onInputChange={(_, val) => {
-              setAnime2(val);
-              debouncedFetch2(val);
-            }}
+            onInputChange={(_, val) => { setAnime2(val); debouncedFetch2(val); }}
             loading={loading2}
             renderInput={(params) => (
-              <TextField {...params} label="Anime 2" InputProps={{
-                ...params.InputProps,
-                endAdornment: (
-                  <>
-                    {loading2 ? <CircularProgress size={20} /> : null}
-                    {params.InputProps.endAdornment}
-                  </>
-                )
-              }} />
+              <TextField
+                {...params}
+                label="Anime 2"
+                size="small"
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (<>{loading2 ? <CircularProgress size={18} /> : null}{params.InputProps.endAdornment}</>),
+                }}
+              />
             )}
-            sx={{ width: 300 }}
+            sx={{ width: { xs: '100%', sm: 280, md: 320 } }}
           />
-          {/* TODO */}
-          <Button
-  variant="contained"
-  color="primary"  
->
-  Search
-</Button>
 
+          <Box sx={{ flex: 1 }} />
+          <Button variant="contained" onClick={handleSearch}>Search</Button>
         </Box>
 
-        {/* Anime List */}
-        <Box flexGrow={1} overflow="auto" p={4}>
-          <Typography variant="h5" fontWeight="bold" mb={2}>
-            Found {animeList?.length || 0} result{animeList?.length !== 1 ? 's' : ''}!
+        <ActiveChips />
+
+        {/* Scrollable results area */}
+        <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, md: 3 } }}>
+          <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
+            {loadingList
+              ? 'Loading results...'
+              : `Found ${animeList?.length || 0} result${animeList?.length === 1 ? '' : 's'}`}
           </Typography>
 
-          <Box display="flex" flexDirection="column" gap={3}>
-            {animeList.map((anime, idx) => (
-              <Box
-                key={idx}
-                p={3}
-                border="1px solid #ccc"
-                borderRadius="20px"
-                bgcolor="white"
-                display="flex"
-                gap={3}
-                alignItems="flex-start"
-              >
-                <Box flexShrink={0}>
-                  <img
-                    src={anime["Image URL"]}
-                    alt={anime.Name}
-                    style={{
-                      width: '120px',
-                      height: '170px',
-                      objectFit: 'cover',
-                      borderRadius: '10px',
-                      border: '1px solid #ddd'
+          <Grid container spacing={2}>
+            {loadingList
+              ? Array.from({ length: 12 }).map((_, i) => (
+                  <Grid key={i} item xs={12} sm={6} md={4} lg={3}>
+                    <Card sx={{ borderRadius: 3 }}>
+                      <Skeleton variant="rectangular" height={220} />
+                      <Box sx={{ p: 2 }}>
+                        <Skeleton width="60%" />
+                        <Skeleton width="90%" />
+                        <Skeleton width="80%" />
+                      </Box>
+                    </Card>
+                  </Grid>
+                ))
+              : animeList.length > 0
+              ? animeList.map((anime, idx) => (
+                  <Grid key={idx} item xs={12} sm={6} md={4} lg={3}>
+                    <Card
+                      elevation={0}
+                      sx={{
+                        borderRadius: 3,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        transition: 'transform 120ms ease',
+                        '&:hover': { transform: 'translateY(-2px)', boxShadow: 2 },
+                      }}
+                    >
+                      <CardActionArea sx={{ alignItems: 'stretch' }}>
+                        <CardMedia
+                          component="img"
+                          height="220"
+                          image={anime['Image URL'] || '/fallback-image.jpg'}
+                          alt={anime.Name}
+                          onError={(e) => { (e.target as HTMLImageElement).src = '/fallback-image.jpg'; }}
+                          sx={{ objectFit: 'cover' }}
+                        />
+                        <CardContent sx={{ minHeight: 150 }}>
+                          <Tooltip title={anime.Name}>
+                            <Typography variant="subtitle1" fontWeight={700} noWrap>
+                              {anime.Name}
+                            </Typography>
+                          </Tooltip>
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', mt: 0.5 }}
+                          >
+                            {anime.Synopsis || ''}
+                          </Typography>
+                          <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+                            <Chip size="small" label={`⭐ ${anime.Score ?? '-'}`} />
+                            <Chip size="small" label={anime.Aired || '—'} />
+                          </Stack>
+                        </CardContent>
+                      </CardActionArea>
+                    </Card>
+                  </Grid>
+                ))
+              : (
+                <Grid item xs={12}>
+                  <Box
+                    sx={{
+                      border: '1px dashed',
+                      borderColor: 'divider',
+                      borderRadius: 3,
+                      p: 6,
+                      textAlign: 'center',
+                      color: 'text.secondary',
                     }}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/fallback-image.jpg';
-                    }}
-                  />
-                </Box>
-                <Box flexGrow={1}>
-                  <Typography variant="h6">{anime.Name}</Typography>
-                  <Typography variant="body2" color="textSecondary" mb={2}>
-                    {anime.Synopsis?.slice(0, 200)}...
-                  </Typography>
-                  <Box display="flex" justifyContent="space-between" textAlign="center">
-                    <Box>
-                      <Typography variant="body1" fontWeight="bold">Rating</Typography>
-                      <Typography>{anime.Score}</Typography>
-                    </Box>
-                    <Box>
-                      <Typography variant="body1" fontWeight="bold">Aired</Typography>
-                      <Typography>{anime.Aired}</Typography>
-                    </Box>
+                  >
+                    <Typography variant="subtitle1" fontWeight={700}>No results</Typography>
+                    <Typography variant="body2">
+                      Try adjusting filters or search terms, then hit <b>Search</b>.
+                    </Typography>
+                    <Button sx={{ mt: 2 }} variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetFilters}>
+                      Reset Filters
+                    </Button>
                   </Box>
-                </Box>
-              </Box>
-            ))}
-          </Box>
+                </Grid>
+              )}
+          </Grid>
 
-          {/* Pagination */}
-          {totalCount > PAGE_SIZE && (
-            <Box mt={4} display="flex" justifyContent="center">
+          {!loadingList && totalCount > PAGE_SIZE && (
+            <Box mt={3} display="flex" justifyContent="center">
               <Pagination
                 count={Math.ceil(totalCount / PAGE_SIZE)}
                 page={page}
