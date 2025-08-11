@@ -129,7 +129,7 @@ const Result: React.FC = () => {
   //   }
   // };
 
-  // ---- OFFLINE RESULT PIPELINE ---------------------------------
+// ---- OFFLINE RESULT PIPELINE ---------------------------------
   // 1) Make computeResults accept overrides
   const computeResults = (
     pageOverride = page,
@@ -146,8 +146,8 @@ const Result: React.FC = () => {
 
     const a1 = (overrides?.anime1 ?? anime1) || '';
     const a2 = (overrides?.anime2 ?? anime2) || '';
-    const aftY = overrides?.afterYear ?? afterYear;
-    const befY = overrides?.beforeYear ?? beforeYear;
+    const aftY = (overrides?.afterYear ?? afterYear) || '';
+    const befY = (overrides?.beforeYear ?? beforeYear) || '';
     const rate = overrides?.rating ?? rating;
     const sort = overrides?.sortField ?? sortField;
 
@@ -155,8 +155,14 @@ const Result: React.FC = () => {
 
     if (a1) list = list.filter(x => x.Name.toLowerCase().includes(a1.toLowerCase()));
     if (a2) list = list.filter(x => x.Name.toLowerCase().includes(a2.toLowerCase()));
-    if (aftY)  list = list.filter(x => parseInt(x.Aired || '0', 10) >= parseInt(aftY, 10));
-    if (befY)  list = list.filter(x => parseInt(x.Aired || '0', 10) <= parseInt(befY, 10));
+
+    // ✅ Only apply year filter when 4-digit year is present
+    if (/^\d{4}$/.test(aftY)) {
+      list = list.filter(x => parseInt(x.Aired || '0', 10) >= parseInt(aftY, 10));
+    }
+    if (/^\d{4}$/.test(befY)) {
+      list = list.filter(x => parseInt(x.Aired || '0', 10) <= parseInt(befY, 10));
+    }
 
     const [minR, maxR] = rate;
     list = list.filter(x => (x.Score ?? 0) >= minR && (x.Score ?? 0) <= maxR);
@@ -177,14 +183,24 @@ const Result: React.FC = () => {
     setLoadingList(false);
   };
 
-  // initial + on page/sort change
+  // initial + on page change
   useEffect(() => {
     // simulate loading
     setLoadingList(true);
     const t = setTimeout(() => computeResults(page), 200);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, sortField]);
+  }, [page]); // ⬅️ removed sortField here because it's now handled in auto-apply
+
+  // ✅ Auto-apply filters when any change happens (debounced)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setPage(1);
+      computeResults(1);
+    }, 400); // adjust debounce delay as desired (300–600ms)
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [afterYear, beforeYear, rating, season, anime1, anime2, sortField]);
 
   const handleSearch = () => {
     setPage(1);
@@ -215,7 +231,7 @@ const Result: React.FC = () => {
     });
   };
 
-  // shared filter UI (used in sidebar + accordion)
+// shared filter UI (used in sidebar + accordion)
   const Filters = () => (
     <Box sx={{ display: 'grid', gap: 2 }}>
       <Box>
@@ -226,18 +242,20 @@ const Result: React.FC = () => {
             fullWidth
             size="small"
             value={afterYear}
-            onChange={(e) => setAfterYear(e.target.value)}
+            // ✅ numeric-only input, max 4 digits
+            onChange={(e) => setAfterYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
             placeholder="e.g. 2015"
-            inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }}
+            inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', maxLength: 4 }}
           />
           <TextField
             label="Before"
             fullWidth
             size="small"
             value={beforeYear}
-            onChange={(e) => setBeforeYear(e.target.value)}
+            // ✅ numeric-only input, max 4 digits
+            onChange={(e) => setBeforeYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
             placeholder="e.g. 2022"
-            inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }}
+            inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', maxLength: 4 }}
           />
         </Stack>
       </Box>
@@ -277,6 +295,7 @@ const Result: React.FC = () => {
       </Stack>
     </Box>
   );
+
 
   const ActiveChips = () => {
     const chips: { label: string; onDelete: () => void }[] = [];
