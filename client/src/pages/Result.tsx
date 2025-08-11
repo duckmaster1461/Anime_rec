@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import axios from 'axios';
+// import axios from 'axios'; // ⛔ server (commented)
 import debounce from 'lodash.debounce';
 import {
   Box, Typography, TextField, Autocomplete, Button, Pagination,
@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import { dummyAnimeList } from '../data/dummyAnimeData';
 
 interface Anime {
   Name: string;
@@ -35,7 +36,7 @@ const Result: React.FC = () => {
 
   const [beforeYear, setBeforeYear] = useState('');
   const [afterYear, setAfterYear] = useState('');
-  const [season, setSeason] = useState('');
+  const [season, setSeason] = useState(''); // kept for UI parity
   const [rating, setRating] = useState<number[]>([0, 10]);
   const [sortField, setSortField] = useState('Score');
 
@@ -52,78 +53,167 @@ const Result: React.FC = () => {
     Duration: 'duration',
     Favorites: 'favorites',
     Ranked: 'ranked',
-    Members: 'members'
+    Members: 'members',
   };
 
-  const fetchTitles = async (query: string, setter: any, setLoading: any) => {
-    if (!query) return setter([]);
-    try {
-      setLoading(true);
-      const res = await axios.get('http://localhost:5000/api/anime/titles', {
-        params: { q: query, limit: 10 },
-      });
-      setter(res.data);
-    } catch (err) {
-      console.error('Failed to fetch titles', err);
-    } finally {
-      setLoading(false);
+  // ---- SERVER TITLE FETCH (disabled) ----------------------------
+  // const fetchTitles = async (query: string, setter: any, setLoading: any) => {
+  //   if (!query) return setter([]);
+  //   try {
+  //     setLoading(true);
+  //     const res = await axios.get('http://localhost:5000/api/anime/titles', {
+  //       params: { q: query, limit: 10 },
+  //     });
+  //     setter(res.data);
+  //   } catch (err) {
+  //     console.error('Failed to fetch titles', err);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+  // const debouncedFetch1 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions1, setLoading1), 300), []);
+  // const debouncedFetch2 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions2, setLoading2), 300), []);
+  // useEffect(() => () => { debouncedFetch1.cancel(); debouncedFetch2.cancel(); }, [debouncedFetch1, debouncedFetch2]);
+
+  // ---- OFFLINE TITLE SEARCH -------------------------------------
+  const allTitleOptions = useMemo(
+    () => dummyAnimeList.map(a => ({ label: a.Name })),
+    []
+  );
+  const localTitleSearch = (q: string, setOptions: any, setLoading: any) => {
+    if (!q?.trim()) return setOptions([]);
+    setLoading(true);
+    const lower = q.toLowerCase();
+    const out = allTitleOptions
+      .filter(o => o.label.toLowerCase().includes(lower))
+      .slice(0, 10);
+    setOptions(out);
+    setLoading(false);
+  };
+  const debouncedLocal1 = useMemo(
+    () => debounce((q: string) => localTitleSearch(q, setOptions1, setLoading1), 200),
+    []
+  );
+  const debouncedLocal2 = useMemo(
+    () => debounce((q: string) => localTitleSearch(q, setOptions2, setLoading2), 200),
+    []
+  );
+  useEffect(() => () => { debouncedLocal1.cancel(); debouncedLocal2.cancel(); }, [debouncedLocal1, debouncedLocal2]);
+
+  // ---- SERVER RESULT FETCH (disabled) ---------------------------
+  // const fetchResults = async (pageOverride = page) => {
+  //   try {
+  //     setLoadingList(true);
+  //     const params: any = {
+  //       page: pageOverride,
+  //       limit: PAGE_SIZE,
+  //       sort: sortMap[sortField] || 'score',
+  //       order: 'desc',
+  //       beforeYear: beforeYear || undefined,
+  //       afterYear: afterYear || undefined,
+  //       season: season || undefined,
+  //       minRating: rating?.[0] ?? undefined,
+  //       maxRating: rating?.[1] ?? undefined,
+  //       minScore: rating?.[0] ?? undefined,
+  //       maxScore: rating?.[1] ?? undefined,
+  //       anime1: anime1 || undefined,
+  //       anime2: anime2 || undefined,
+  //     };
+  //     const res = await axios.get('http://localhost:5000/api/anime', { params });
+  //     setAnimeList(res.data.results || []);
+  //     setTotalCount(res.data.total || 0);
+  //   } catch (err) {
+  //     console.error('❌ Failed to fetch anime list', err);
+  //   } finally {
+  //     setLoadingList(false);
+  //   }
+  // };
+
+  // ---- OFFLINE RESULT PIPELINE ---------------------------------
+  // 1) Make computeResults accept overrides
+  const computeResults = (
+    pageOverride = page,
+    overrides?: Partial<{
+      anime1: string | null;
+      anime2: string | null;
+      afterYear: string;
+      beforeYear: string;
+      rating: number[];
+      sortField: string;
+    }>
+  ) => {
+    setLoadingList(true);
+
+    const a1 = (overrides?.anime1 ?? anime1) || '';
+    const a2 = (overrides?.anime2 ?? anime2) || '';
+    const aftY = overrides?.afterYear ?? afterYear;
+    const befY = overrides?.beforeYear ?? beforeYear;
+    const rate = overrides?.rating ?? rating;
+    const sort = overrides?.sortField ?? sortField;
+
+    let list = [...dummyAnimeList];
+
+    if (a1) list = list.filter(x => x.Name.toLowerCase().includes(a1.toLowerCase()));
+    if (a2) list = list.filter(x => x.Name.toLowerCase().includes(a2.toLowerCase()));
+    if (aftY)  list = list.filter(x => parseInt(x.Aired || '0', 10) >= parseInt(aftY, 10));
+    if (befY)  list = list.filter(x => parseInt(x.Aired || '0', 10) <= parseInt(befY, 10));
+
+    const [minR, maxR] = rate;
+    list = list.filter(x => (x.Score ?? 0) >= minR && (x.Score ?? 0) <= maxR);
+
+    const key = (sortMap[sort] || 'score').toLowerCase();
+    if (key === 'score') {
+      list.sort((a, b) => (b.Score ?? 0) - (a.Score ?? 0));
+    } else if (key === 'aired') {
+      list.sort((a, b) => parseInt(b.Aired || '0', 10) - parseInt(a.Aired || '0', 10));
     }
+
+    const total = list.length;
+    const start = (pageOverride - 1) * PAGE_SIZE;
+    const pageSlice = list.slice(start, start + PAGE_SIZE);
+
+    setTotalCount(total);
+    setAnimeList(pageSlice);
+    setLoadingList(false);
   };
 
-  const debouncedFetch1 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions1, setLoading1), 300), []);
-  const debouncedFetch2 = useMemo(() => debounce((q: string) => fetchTitles(q, setOptions2, setLoading2), 300), []);
-  useEffect(() => () => { debouncedFetch1.cancel(); debouncedFetch2.cancel(); }, [debouncedFetch1, debouncedFetch2]);
+  // initial + on page/sort change
+  useEffect(() => {
+    // simulate loading
+    setLoadingList(true);
+    const t = setTimeout(() => computeResults(page), 200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, sortField]);
 
-  const fetchResults = async (pageOverride = page) => {
-    try {
-      setLoadingList(true);
-      const params: any = {
-        page: pageOverride,
-        limit: PAGE_SIZE,
-        sort: sortMap[sortField] || 'score',
-        order: 'desc', // or state-driven
-        // filters
-        beforeYear: beforeYear || undefined,
-        afterYear: afterYear || undefined,
-        season: season || undefined,
-        minRating: rating?.[0] ?? undefined,
-        maxRating: rating?.[1] ?? undefined,
-        // keep legacy keys for now (can remove once BE fully updated)
-        minScore: rating?.[0] ?? undefined,
-        maxScore: rating?.[1] ?? undefined,
-        // search (independent)
-        anime1: anime1 || undefined,
-        anime2: anime2 || undefined,
-      };
-
-      const res = await axios.get('http://localhost:5000/api/anime', { params });
-      setAnimeList(res.data.results || []);
-      setTotalCount(res.data.total || 0);
-    } catch (err) {
-      console.error('❌ Failed to fetch anime list', err);
-    } finally {
-      setLoadingList(false);
-    }
+  const handleSearch = () => {
+    setPage(1);
+    computeResults(1);
   };
 
+  // 2) Fix Reset to clear everything and pass overrides into computeResults
   const handleResetFilters = () => {
+    setAnime1('');
+    setAnime2('');
+    setOptions1([]);
+    setOptions2([]);
+
     setBeforeYear('');
     setAfterYear('');
     setSeason('');
     setRating([0, 10]);
     setSortField('Score');
-    setPage(1);
-    fetchResults(1);
-  };
 
-  const handleSearch = () => {
     setPage(1);
-    fetchResults(1);
+    computeResults(1, {
+      anime1: '',
+      anime2: '',
+      afterYear: '',
+      beforeYear: '',
+      rating: [0, 10],
+      sortField: 'Score',
+    });
   };
-
-  useEffect(() => {
-    fetchResults();
-  }, [page, sortField]);
 
   // shared filter UI (used in sidebar + accordion)
   const Filters = () => (
@@ -171,12 +261,13 @@ const Result: React.FC = () => {
         <Select value={sortField} onChange={(e) => setSortField(e.target.value as string)} fullWidth size="small">
           <MenuItem value="Score">Rating</MenuItem>
           <MenuItem value="Aired">Release Year</MenuItem>
-          <MenuItem value="Popularity">Popularity</MenuItem>
-          <MenuItem value="Episodes">Episodes</MenuItem>
-          <MenuItem value="Duration">Duration</MenuItem>
-          <MenuItem value="Favorites">Favorites</MenuItem>
-          <MenuItem value="Ranked">Rank</MenuItem>
-          <MenuItem value="Members">Members</MenuItem>
+          {/* Other options kept for future server mode */}
+          <MenuItem value="Popularity" disabled>Popularity</MenuItem>
+          <MenuItem value="Episodes" disabled>Episodes</MenuItem>
+          <MenuItem value="Duration" disabled>Duration</MenuItem>
+          <MenuItem value="Favorites" disabled>Favorites</MenuItem>
+          <MenuItem value="Ranked" disabled>Rank</MenuItem>
+          <MenuItem value="Members" disabled>Members</MenuItem>
         </Select>
       </Box>
 
@@ -256,7 +347,7 @@ const Result: React.FC = () => {
             options={options1.filter((opt) => opt.label !== anime2)}
             value={anime1}
             onChange={(_, val) => setAnime1(typeof val === 'string' ? val : val?.label || '')}
-            onInputChange={(_, val) => { setAnime1(val); debouncedFetch1(val); }}
+            onInputChange={(_, val) => { setAnime1(val); debouncedLocal1(val); }}
             loading={loading1}
             renderInput={(params) => (
               <TextField
@@ -277,7 +368,7 @@ const Result: React.FC = () => {
             options={options2.filter((opt) => opt.label !== anime1)}
             value={anime2}
             onChange={(_, val) => setAnime2(typeof val === 'string' ? val : val?.label || '')}
-            onInputChange={(_, val) => { setAnime2(val); debouncedFetch2(val); }}
+            onInputChange={(_, val) => { setAnime2(val); debouncedLocal2(val); }}
             loading={loading2}
             renderInput={(params) => (
               <TextField
@@ -304,7 +395,7 @@ const Result: React.FC = () => {
           <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
             {loadingList
               ? 'Loading results...'
-              : `Found ${animeList?.length || 0} result${animeList?.length === 1 ? '' : 's'}`}
+              : `Found ${totalCount || 0} result${totalCount === 1 ? '' : 's'}`}
           </Typography>
 
           <Grid container spacing={2}>
