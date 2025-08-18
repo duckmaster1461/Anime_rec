@@ -11,6 +11,20 @@ import Result from './pages/Result';
 import Header from './components/Header';
 import Footer from './components/Footer';
 
+const ScrollPage: React.FC<React.PropsWithChildren> = ({ children }) => (
+  <div
+    style={{
+      height: '100%',
+      overflowY: 'auto',
+      overflowX: 'hidden',
+      WebkitOverflowScrolling: 'touch', // smooth on iOS
+      overscrollBehavior: 'contain',    // prevent scroll chaining
+    }}
+  >
+    {children}
+  </div>
+);
+
 const Layout: React.FC = () => {
   const location = useLocation();
   const isHome = location.pathname === '/';
@@ -27,10 +41,19 @@ const Layout: React.FC = () => {
       }}
     >
       <Header />
+      {/* This keeps the app frame fixed-height, no page-level scroll */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/result" element={<Result />} />
+          {/* Only Result gets its own scrollable viewport */}
+          <Route
+            path="/result"
+            element={
+              <ScrollPage>
+                <Result />
+              </ScrollPage>
+            }
+          />
         </Routes>
       </div>
       <Footer />
