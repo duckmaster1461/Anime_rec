@@ -4,7 +4,8 @@ import {
   Routes,
   Route,
   useLocation,
-  Navigate, // ✅ for redirects
+  Navigate,
+  useParams,
 } from 'react-router-dom';
 import { CssBaseline, GlobalStyles } from '@mui/material';
 import Home from './pages/Home';
@@ -12,6 +13,12 @@ import Result from './pages/Result';
 import ResultDetail from './pages/ResultDetail';
 import Header from './components/Header';
 import Footer from './components/Footer';
+
+// ✅ small helper to redirect legacy /result/:slug -> /results/:slug
+function LegacyResultRedirect() {
+  const { slug } = useParams();
+  return <Navigate to={slug ? `/results/${slug}` : '/results'} replace />;
+}
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -31,17 +38,18 @@ const Layout: React.FC = () => {
       <Header />
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <Routes>
+          {/* Home */}
           <Route path="/" element={<Home />} />
 
-          {/* ✅ Canonical (plural) routes */}
+          {/* Canonical results routes */}
           <Route path="/results" element={<Result />} />
           <Route path="/results/:slug" element={<ResultDetail />} />
 
-          {/* 🔁 Redirect legacy singular paths to plural */}
+          {/* Legacy /result redirects */}
           <Route path="/result" element={<Navigate to="/results" replace />} />
-          <Route path="/result/:slug" element={<Navigate to="/results/:slug" replace />} />
+          <Route path="/result/:slug" element={<LegacyResultRedirect />} />
 
-          {/* (optional) 404 fallback */}
+          {/* 404 fallback (optional) */}
           {/* <Route path="*" element={<Navigate to="/" replace />} /> */}
         </Routes>
       </div>
