@@ -1,38 +1,49 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
-// import axios from 'axios'; // ⛔ server (commented)
+import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import debounce from 'lodash.debounce';
 import {
-  Box, Typography, TextField, Autocomplete, Button,
-  Slider, Select, MenuItem
+  Box, Typography, TextField, Autocomplete, Button, Pagination,
+  Slider, RadioGroup, Radio, FormControlLabel, FormLabel, Select, MenuItem,
+  CircularProgress, Grid, Card, CardActionArea, CardMedia, CardContent,
+  Chip, Stack, Tooltip, Accordion, AccordionSummary, AccordionDetails, Skeleton
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import { dummyAnimeList } from '../data/dummyAnimeData';
 
-interface Anime {
-  Name: string;
-  Synopsis: string;
-  Score: number;
-  Aired: string;
-  "Image URL": string;
-}
+// 🔁 Use your long-schema dummy data + type
+import { dummyAnimeList, Anime } from '../data/dummyAnimeData';
 
-//const PAGE_SIZE = 50; // used for API limit
+const PAGE_SIZE = 50;
 
-const sortMap: Record<string, string> = {
-  Score: 'score',
-  Aired: 'aired',
-  Popularity: 'popularity',
-  Episodes: 'episodes',
-  Duration: 'duration',
-  Favorites: 'favorites',
-  Ranked: 'ranked',
-  Members: 'members'
-};
+// Helpers to read mixed fields safely
+const getTitle = (a: Anime) =>
+  a.title_userPreferred || a.title_romaji || a.title_native || '—';
+
+const getYear = (a: Anime) =>
+  a.startDate_year ?? a.endDate_year ?? null;
+
+const getScoreNum = (a: Anime) =>
+  typeof a.averageScore === 'number'
+    ? a.averageScore
+    : typeof a.meanScore === 'number'
+    ? a.meanScore
+    : null;
+
+const getDesc = (a: Anime) => a.description || '';
+
+const slugify = (s: string) =>
+  s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+
+const posterFromTitle = (title: string) =>
+  `https://placehold.co/300x420?text=${encodeURIComponent(title || 'No Image')}`;
+
+const getPoster = (a: Anime) =>
+  // if you later add a.imageUrl, it will be used; otherwise generate a placeholder
+  (a as any).imageUrl || posterFromTitle(getTitle(a));
 
 const Result: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const defaultAnime1 = (location.state as any)?.anime1 || '';
   const defaultAnime2 = (location.state as any)?.anime2 || '';
 
@@ -46,208 +57,315 @@ const Result: React.FC = () => {
   const [beforeYear, setBeforeYear] = useState('');
   const [afterYear, setAfterYear] = useState('');
   const [season, setSeason] = useState(''); // kept for UI parity
-  const [rating, setRating] = useState<number[]>([0, 10]);
+  const [rating, setRating] = useState<number[]>([0, 100]); // /100 to match averageScore
   const [sortField, setSortField] = useState('Score');
 
   const [animeList, setAnimeList] = useState<Anime[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loadingList, setLoadingList] = useState(false);
 
-  const fetchTitles = async (query: string, setter: any, setLoading: any) => {
-    if (!query) return setter([]);
-    try {
-      console.log(`🔍 Fetching title options for: "${query}"`);
-      setLoading(true);
-      const res = await axios.get('http://localhost:5000/api/anime/titles', {
-        params: { q: query, limit: 10 },
-      });
-      console.log('✅ Title options:', res.data);
-      setter(res.data);
-    } catch (err) {
-      console.error('❌ Failed to fetch titles:', err);
-    } finally {
-      setLoading(false);
-    }
+  const sortMap: Record<string, string> = {
+    Score: 'averageScore',
+    Aired: 'startDate_year',
+    // kept for future server mode
+    Popularity: 'popularity',
+    Episodes: 'episodes',
+    Duration: 'duration',
+    Favorites: 'favorites',
+    Ranked: 'ranked',
+    Members: 'members',
   };
 
-  const debouncedFetch1 = useMemo(() =>
-    debounce((q: string) => fetchTitles(q, setOptions1, setLoading1), 300), []);
+  // ---- OFFLINE TITLE SEARCH (against long schema) ----
+  const allTitleOptions = useMemo(
+    () => dummyAnimeList.map(a => ({ label: getTitle(a) })),
+    []
+  );
 
-  const debouncedFetch2 = useMemo(() =>
-    debounce((q: string) => fetchTitles(q, setOptions2, setLoading2), 300), []);
+  const localTitleSearch = (q: string, setOptions: any, setLoading: any) => {
+    if (!q?.trim()) return setOptions([]);
+    setLoading(true);
+    const lower = q.toLowerCase();
+    const out = allTitleOptions
+      .filter(o => o.label.toLowerCase().includes(lower))
+      .slice(0, 10);
+    setOptions(out);
+    setLoading(false);
+  };
 
-  const fetchResults = useCallback(async () => {
-    const queryParams = {
-      anime1,
-      anime2,
-      beforeYear,
-      afterYear,
-      season,
-      minRating: rating[0],
-      maxRating: rating[1],
-      sort: sortMap[sortField] || 'score',
-      order: 'desc',
-      limit: 50,
-    };
+  const debouncedLocal1 = useMemo(
+    () => debounce((q: string) => localTitleSearch(q, setOptions1, setLoading1), 200),
+    []
+  );
+  const debouncedLocal2 = useMemo(
+    () => debounce((q: string) => localTitleSearch(q, setOptions2, setLoading2), 200),
+    []
+  );
+  useEffect(() => () => { debouncedLocal1.cancel(); debouncedLocal2.cancel(); }, [debouncedLocal1, debouncedLocal2]);
 
-    console.log('🚀 Fetching anime results with filters:', queryParams);
+  // ---- OFFLINE RESULT PIPELINE (long schema) ----
+  const computeResults = (
+    pageOverride = page,
+    overrides?: Partial<{
+      anime1: string | null;
+      anime2: string | null;
+      afterYear: string;
+      beforeYear: string;
+      rating: number[];
+      sortField: string;
+    }>
+  ) => {
+    setLoadingList(true);
 
-    try {
-      const res = await axios.get('http://localhost:5000/api/anime', {
-        params: queryParams,
-      });
-      console.log(`✅ Retrieved ${res.data?.results?.length || 0} anime`);
-      setAnimeList(res.data.results);
-    } catch (err) {
-      console.error('❌ Failed to fetch anime list:', err);
+    const a1 = (overrides?.anime1 ?? anime1) || '';
+    const a2 = (overrides?.anime2 ?? anime2) || '';
+    const aftY = (overrides?.afterYear ?? afterYear) || '';
+    const befY = (overrides?.beforeYear ?? beforeYear) || '';
+    const rate = overrides?.rating ?? rating;
+    const sort = overrides?.sortField ?? sortField;
+
+    let list = [...dummyAnimeList];
+
+    const matchTitle = (x: Anime, q: string) =>
+      getTitle(x).toLowerCase().includes(q.toLowerCase());
+
+    // OR search: if both are filled, keep items that match either
+    if (a1 || a2) {
+      list = list.filter(x =>
+        (a1 && matchTitle(x, a1)) ||
+        (a2 && matchTitle(x, a2))
+      );
     }
-  }, [anime1, anime2, beforeYear, afterYear, season, rating, sortField]);
+
+    // Year filters use startDate_year (fallback to endDate_year)
+    const toYear = (x: Anime) => getYear(x) ?? 0;
+
+    if (/^\d{4}$/.test(aftY)) {
+      const y = parseInt(aftY, 10);
+      list = list.filter(x => toYear(x) >= y);
+    }
+    if (/^\d{4}$/.test(befY)) {
+      const y = parseInt(befY, 10);
+      list = list.filter(x => toYear(x) <= y);
+    }
+
+    // Score filter uses /100 scale from averageScore/meanScore
+    const [minR, maxR] = rate;
+    list = list.filter(x => {
+      const s = getScoreNum(x);
+      if (s === null) return false;
+      return s >= minR && s <= maxR;
+    });
+
+    // Sorting
+    const key = (sortMap[sort] || 'averageScore');
+    if (key === 'averageScore') {
+      list.sort((a, b) => (getScoreNum(b) ?? -1) - (getScoreNum(a) ?? -1));
+    } else if (key === 'startDate_year') {
+      list.sort((a, b) => (getYear(b) ?? 0) - (getYear(a) ?? 0));
+    }
+
+    const total = list.length;
+    const start = (pageOverride - 1) * PAGE_SIZE;
+    const pageSlice = list.slice(start, start + PAGE_SIZE);
+
+    setTotalCount(total);
+    setAnimeList(pageSlice);
+    setLoadingList(false);
+  };
+
+  // initial + on page change
+  useEffect(() => {
+    setLoadingList(true);
+    const t = setTimeout(() => computeResults(page), 200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  // auto-apply on any filter change
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setPage(1);
+      computeResults(1);
+    }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [afterYear, beforeYear, rating, season, anime1, anime2, sortField]);
+
+  const handleSearch = () => {
+    setPage(1);
+    computeResults(1);
+  };
 
   const handleResetFilters = () => {
-    console.log('🔄 Resetting filters');
+    setAnime1('');
+    setAnime2('');
+    setOptions1([]);
+    setOptions2([]);
+
     setBeforeYear('');
     setAfterYear('');
     setSeason('');
-    setRating([0, 10]);
+    setRating([0, 100]);
     setSortField('Score');
+
+    setPage(1);
+    computeResults(1, {
+      anime1: '',
+      anime2: '',
+      afterYear: '',
+      beforeYear: '',
+      rating: [0, 100],
+      sortField: 'Score',
+    });
   };
 
-  useEffect(() => {
-    console.log('📡 useEffect triggered');
-    fetchResults();
-  }, [anime1, anime2, sortField, beforeYear, afterYear, season, rating, fetchResults]);
-
-  return (
-    <Box
-      display="flex"
-      height="calc(100vh - 128px)"
-      sx={{
-        background: 'linear-gradient(to top left, rgb(180, 63, 47) 0%, rgb(114, 80, 173) 50%, rgb(84, 151, 193) 100%)'
-      }}
-    >
-      {/* Sidebar Filters */}
-      <Box
-        width="300px"
-        p={3}
-        bgcolor="transparent"
-        borderRight="0px solid #ddd"
-        display="flex"
-        flexDirection="column"
-        gap={4}
-        sx={{
-          backdropFilter: 'blur(2px)',
-          color: '#fff',
-          textShadow: '0 1px 6px rgba(0,0,0,0.5)',
-          fontWeight: 500
-        }}
-      >
-        <Box>
-          <Typography variant="h6" gutterBottom sx={{ color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>Release Year</Typography>
-          <TextField
-            label="Before"
-            fullWidth
-            margin="dense"
-            value={beforeYear}
-            onChange={(e) => setBeforeYear(e.target.value)}
-            InputLabelProps={{ style: { color: '#fff' } }}
-            InputProps={{ style: { color: '#fff' } }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-          '& fieldset': { borderColor: '#fff' },
-          '&:hover fieldset': { borderColor: '#fff' },
-          '&.Mui-focused fieldset': { borderColor: '#fff' },
-              },
-              '& .MuiInputLabel-root': { color: '#fff' }
-            }}
-          />
+  // shared filter UI (used in sidebar + accordion)
+  const Filters = () => (
+    <Box sx={{ display: 'grid', gap: 2 }}>
+      <Box>
+        <Typography variant="subtitle2" gutterBottom>Release Year</Typography>
+        <Stack direction="row" spacing={1}>
           <TextField
             label="After"
             fullWidth
-            margin="dense"
+            size="small"
             value={afterYear}
-            onChange={(e) => setAfterYear(e.target.value)}
-            InputLabelProps={{ style: { color: '#fff' } }}
-            InputProps={{ style: { color: '#fff' } }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-          '& fieldset': { borderColor: '#fff' },
-          '&:hover fieldset': { borderColor: '#fff' },
-          '&.Mui-focused fieldset': { borderColor: '#fff' },
-              },
-              '& .MuiInputLabel-root': { color: '#fff' }
-            }}
+            onChange={(e) => setAfterYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            placeholder="e.g. 2015"
+            inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', maxLength: 4 }}
           />
-        </Box>
-
-        <Box>
-          <Typography variant='h6' gutterBottom sx={{ color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>Rating</Typography>
-          <Slider
-            value={rating}
-            onChange={(_, val) => setRating(val as number[])}
-            valueLabelDisplay="auto"
-            min={0.0}
-            max={10.0}
-            sx={{ color: 'rgb(0, 26, 255)' }}
-          />
-        </Box>
-
-        <Box>
-          <Typography variant='h6' gutterBottom sx={{ color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>Sort by</Typography>
-          <Select
-            value={sortField}
-            onChange={(e) => setSortField(e.target.value)}
+          <TextField
+            label="Before"
             fullWidth
-            sx={{ color: '#fff', '.MuiOutlinedInput-notchedOutline': { borderColor: '#fff' }, '.MuiSvgIcon-root': { color: '#fff' } }}
-          >
-            <MenuItem value="Score">Rating</MenuItem>
-            <MenuItem value="Aired">Release Year</MenuItem>
-            <MenuItem value="Popularity">Popularity</MenuItem>
-            <MenuItem value="Episodes">Episodes</MenuItem>
-            <MenuItem value="Duration">Duration</MenuItem>
-            <MenuItem value="Favorites">Favorites</MenuItem>
-            <MenuItem value="Ranked">Rank</MenuItem>
-            <MenuItem value="Members">Members</MenuItem>
-          </Select>
-        </Box>
-
-        <Button variant="outlined" onClick={handleResetFilters} sx={{ color: '#fff', borderColor: '#fff' }}>
-          Reset Filters
-        </Button>
+            size="small"
+            value={beforeYear}
+            onChange={(e) => setBeforeYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            placeholder="e.g. 2022"
+            inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', maxLength: 4 }}
+          />
+        </Stack>
       </Box>
 
-      {/* Main Content */}
-      <Box flexGrow={1} display="flex" flexDirection="column" height="100%">
-        {/* Sticky Search Bar */}
+      <Box>
+        <FormLabel component="legend">Season</FormLabel>
+        <RadioGroup row value={season} onChange={(e) => setSeason(e.target.value)}>
+          {['Spring', 'Summer', 'Autumn', 'Winter'].map((s) => (
+            <FormControlLabel key={s} value={s} control={<Radio />} label={s} />
+          ))}
+        </RadioGroup>
+      </Box>
+
+      <Box>
+        <Typography variant="subtitle2" gutterBottom>Score (0–100)</Typography>
+        <Slider value={rating} onChange={(_, v) => setRating(v as number[])} valueLabelDisplay="auto" min={0} max={100} />
+      </Box>
+
+      <Box>
+        <Typography variant="subtitle2" gutterBottom>Sort by</Typography>
+        <Select value={sortField} onChange={(e) => setSortField(e.target.value as string)} fullWidth size="small">
+          <MenuItem value="Score">Score</MenuItem>
+          <MenuItem value="Aired">Aired (Year)</MenuItem>
+          {/* Future server-side sorts */}
+          <MenuItem value="Popularity" disabled>Popularity</MenuItem>
+          <MenuItem value="Episodes" disabled>Episodes</MenuItem>
+          <MenuItem value="Duration" disabled>Duration</MenuItem>
+          <MenuItem value="Favorites" disabled>Favorites</MenuItem>
+          <MenuItem value="Ranked" disabled>Rank</MenuItem>
+          <MenuItem value="Members" disabled>Members</MenuItem>
+        </Select>
+      </Box>
+
+      <Stack direction="row" spacing={1}>
+        <Button fullWidth variant="contained" onClick={handleSearch}>Apply</Button>
+        <Button fullWidth variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetFilters}>Reset</Button>
+      </Stack>
+    </Box>
+  );
+
+  const ActiveChips = () => {
+    const chips: { label: string; onDelete: () => void }[] = [];
+    if (anime1) chips.push({ label: `Anime 1: ${anime1}`, onDelete: () => setAnime1('') });
+    if (anime2) chips.push({ label: `Anime 2: ${anime2}`, onDelete: () => setAnime2('') });
+    if (afterYear) chips.push({ label: `After: ${afterYear}`, onDelete: () => setAfterYear('') });
+    if (beforeYear) chips.push({ label: `Before: ${beforeYear}`, onDelete: () => setBeforeYear('') });
+    if (season) chips.push({ label: `Season: ${season}`, onDelete: () => setSeason('') });
+    if (rating[0] !== 0 || rating[1] !== 100) chips.push({ label: `Score: ${rating[0]}–${rating[1]}`, onDelete: () => setRating([0, 100]) });
+    if (!chips.length) return null;
+    return (
+      <Stack direction="row" spacing={1} sx={{ px: 2, pb: 1, flexWrap: 'wrap', gap: 1 }}>
+        {chips.map((c, i) => <Chip key={i} label={c.label} onDelete={c.onDelete} variant="outlined" size="small" />)}
+      </Stack>
+    );
+  };
+
+  return (
+    <Box sx={{ display: 'flex', height: '100%', minHeight: 0, bgcolor: 'background.default' }}>
+      {/* Sidebar (desktop) */}
+      <Box
+        sx={{
+          display: { xs: 'none', md: 'block' },
+          width: 320,
+          p: 3,
+          borderRight: '1px solid',
+          borderColor: 'divider',
+          flexShrink: 0,
+          overflow: 'auto',
+        }}
+      >
+        <Typography variant="h6" sx={{ mb: 2 }}>Filters</Typography>
+        <Filters />
+      </Box>
+
+      {/* Main */}
+      <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {/* Filters (mobile) */}
+        <Box sx={{ display: { xs: 'block', md: 'none' }, p: 1 }}>
+          <Accordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography>Filters</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Filters />
+            </AccordionDetails>
+          </Accordion>
+        </Box>
+
+        {/* Sticky search row */}
         <Box
-          position="sticky"
-          top={0}
-          zIndex={10}
-          bgcolor="transparent"
-          p={3}
-          display="flex"
-          gap={2}
-          sx={{ backdropFilter: 'blur(2px)', color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}
+          sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+            bgcolor: 'background.paper',
+            p: 2,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            display: 'flex',
+            gap: 2,
+            flexWrap: 'wrap',
+          }}
         >
           <Autocomplete
             freeSolo
             options={options1.filter((opt) => opt.label !== anime2)}
             value={anime1}
             onChange={(_, val) => setAnime1(typeof val === 'string' ? val : val?.label || '')}
-            onInputChange={(_, val) => { setAnime1(val); debouncedFetch1(val); }}
+            onInputChange={(_, val) => { setAnime1(val); debouncedLocal1(val); }}
             loading={loading1}
             renderInput={(params) => (
               <TextField
                 {...params}
                 label="Anime 1"
+                size="small"
                 InputProps={{
                   ...params.InputProps,
-                  endAdornment: (
-                    <> {loading1 ? <CircularProgress size={20}/> : null} {params.InputProps.endAdornment} </>
-                  ),
-                  style: { color: '#fff' }
+                  endAdornment: (<>{loading1 ? <CircularProgress size={18} /> : null}{params.InputProps.endAdornment}</>),
                 }}
-                InputLabelProps={{ style: { color: '#fff' } }}
-                sx={{ width: 300 }}
               />
             )}
+            sx={{ width: { xs: '100%', sm: 280, md: 320 } }}
           />
 
           <Autocomplete
@@ -255,66 +373,147 @@ const Result: React.FC = () => {
             options={options2.filter((opt) => opt.label !== anime1)}
             value={anime2}
             onChange={(_, val) => setAnime2(typeof val === 'string' ? val : val?.label || '')}
-            onInputChange={(_, val) => { setAnime2(val); debouncedFetch2(val); }}
+            onInputChange={(_, val) => { setAnime2(val); debouncedLocal2(val); }}
             loading={loading2}
             renderInput={(params) => (
               <TextField
                 {...params}
                 label="Anime 2"
+                size="small"
                 InputProps={{
                   ...params.InputProps,
-                  endAdornment: (
-                    <> {loading2 ? <CircularProgress size={20}/> : null} {params.InputProps.endAdornment} </>
-                  ),
-                  style: { color: '#fff' }
+                  endAdornment: (<>{loading2 ? <CircularProgress size={18} /> : null}{params.InputProps.endAdornment}</>),
                 }}
-                InputLabelProps={{ style: { color: '#fff' } }}
-                sx={{ width: 300 }}
               />
             )}
+            sx={{ width: { xs: '100%', sm: 280, md: 320 } }}
           />
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={fetchResults}
-            sx={{ fontWeight: 600, boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
-          >
-            Search
-          </Button>
+
+          <Box sx={{ flex: 1 }} />
+          <Button variant="contained" onClick={handleSearch}>Search</Button>
         </Box>
 
-        {/* Anime List */}
-        <Box
-          flexGrow={1}
-          overflow="auto"
-          p={4}
-          sx={{
-            '&::-webkit-scrollbar': { width: '16px', background: 'transparent' },
-            '&::-webkit-scrollbar-thumb': { background: 'rgba(255,255,255,0.08)', borderRadius: '16px' },
-            scrollbarColor: 'rgba(255,255,255,0.08) transparent', scrollbarWidth: 'thin'
-          }}
-        >
-          <Typography variant="h5" fontWeight="bold" mb={2} sx={{ color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>
-            Found {animeList?.length || 0} result{animeList?.length !== 1 ? 's' : ''}!
+        <ActiveChips />
+
+        {/* Scrollable results area */}
+        <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, md: 3 } }}>
+          <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
+            {loadingList
+              ? 'Loading results...'
+              : `Found ${totalCount || 0} result${totalCount === 1 ? '' : 's'}`}
           </Typography>
 
-          <Box display="flex" flexDirection="column" gap={3}>
-            {animeList.map((anime, idx) => (
-              <Box key={idx} p={3} border="2px solid #ccc" borderRadius="20px" bgcolor="transparent" display="flex" gap={3} alignItems="flex-start" sx={{ backgroundColor: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(2px)' }}>
-                <Box flexShrink={0}>
-                  <img src={anime["Image URL"]} alt={anime.Name} style={{ width: '120px', height: '170px', objectFit: 'cover', borderRadius: '10px' }} onError={(e) => { (e.target as HTMLImageElement).src = '/fallback-image.jpg'; }} />
-                </Box>
-                <Box flexGrow={1}>
-                  <Typography variant="h6">{anime.Name}</Typography>
-                  <Typography variant="body2" color="textSecondary" mb={2}>{anime.Synopsis?.slice(0, 200)}...</Typography>
-                  <Box display="flex" justifyContent="space-between" textAlign="center">
-                    <Box><Typography variant="body1" fontWeight="bold">Rating</Typography><Typography>{anime.Score}</Typography></Box>
-                    <Box><Typography variant="body1" fontWeight="bold">Aired</Typography><Typography>{anime.Aired}</Typography></Box>
+          <Grid container spacing={2}>
+            {loadingList
+              ? Array.from({ length: 12 }).map((_, i) => (
+                  <Grid key={i} item xs={12} sm={6} md={4} lg={3}>
+                    <Card sx={{ borderRadius: 3 }}>
+                      <Skeleton variant="rectangular" height={220} />
+                      <Box sx={{ p: 2 }}>
+                        <Skeleton width="60%" />
+                        <Skeleton width="90%" />
+                        <Skeleton width="80%" />
+                      </Box>
+                    </Card>
+                  </Grid>
+                ))
+              : animeList.length > 0
+              ? animeList.map((a, idx) => {
+                  const title = getTitle(a);
+                  const year = getYear(a);
+                  const score = getScoreNum(a);
+                  const desc = getDesc(a);
+                  const poster = getPoster(a);
+
+                  return (
+                    <Grid key={idx} item xs={12} sm={6} md={4} lg={3}>
+                      <Card
+                        elevation={0}
+                        sx={{
+                          borderRadius: 3,
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          transition: 'transform 120ms ease',
+                          '&:hover': { transform: 'translateY(-2px)', boxShadow: 2 },
+                          height: '100%',
+                          display: 'flex',
+                          flexDirection: 'column',
+                        }}
+                      >
+                        <CardActionArea
+                          sx={{ alignItems: 'stretch' }}
+                          onClick={() => navigate(`/results/${slugify(title)}`)}
+                        >
+                          <CardMedia
+                            component="img"
+                            height="220"
+                            image={poster}
+                            alt={title}
+                            // if external image fails, swap to text placeholder
+                            onError={(e) => {
+                              const img = e.currentTarget as HTMLImageElement;
+                              img.src = posterFromTitle(title);
+                            }}
+                            sx={{ objectFit: 'cover' }}
+                          />
+                          <CardContent sx={{ minHeight: 150 }}>
+                            <Tooltip title={title}>
+                              <Typography variant="subtitle1" fontWeight={700} noWrap>
+                                {title}
+                              </Typography>
+                            </Tooltip>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', mt: 0.5 }}
+                            >
+                              {desc}
+                            </Typography>
+                            <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+                              <Chip size="small" label={`⭐ ${score ?? '—'}/100`} />
+                              <Chip size="small" label={year ?? '—'} />
+                            </Stack>
+                          </CardContent>
+                        </CardActionArea>
+                      </Card>
+                    </Grid>
+                  );
+                })
+              : (
+                <Grid item xs={12}>
+                  <Box
+                    sx={{
+                      border: '1px dashed',
+                      borderColor: 'divider',
+                      borderRadius: 3,
+                      p: 6,
+                      textAlign: 'center',
+                      color: 'text.secondary',
+                    }}
+                  >
+                    <Typography variant="subtitle1" fontWeight={700}>No results</Typography>
+                    <Typography variant="body2">
+                      Try adjusting filters or search terms, then hit <b>Search</b>.
+                    </Typography>
+                    <Button sx={{ mt: 2 }} variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetFilters}>
+                      Reset Filters
+                    </Button>
                   </Box>
-                </Box>
-              </Box>
-            ))}
-          </Box>
+                </Grid>
+              )}
+          </Grid>
+
+          {!loadingList && totalCount > PAGE_SIZE && (
+            <Box mt={3} display="flex" justifyContent="center">
+              <Pagination
+                count={Math.ceil(totalCount / PAGE_SIZE)}
+                page={page}
+                onChange={(_, val) => setPage(val)}
+                color="primary"
+                size="large"
+              />
+            </Box>
+          )}
         </Box>
       </Box>
     </Box>
