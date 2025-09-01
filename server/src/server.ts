@@ -11,7 +11,7 @@ dotenv.config({ path: './.env' });
 const app = express();
 
 // Middleware
-app.use(cors({ origin: ['http://localhost:3000'], credentials: false }));
+app.use(cors({ origin: ['http://anime-rec-8x6g.onrender.com', 'http://localhost:3000'], credentials: false }));
 app.use(express.json());
 
 // DB Connection
