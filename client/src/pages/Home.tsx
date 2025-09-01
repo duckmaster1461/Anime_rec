@@ -1,19 +1,13 @@
+// src/pages/Home.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Box,
-  Typography,
-  TextField,
-  Button,
-  Autocomplete,
-  CircularProgress,
+  Box, Typography, TextField, Button, Autocomplete, CircularProgress,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import debounce from 'lodash.debounce';
+import { fetchTitles } from '../api';
 
-interface AnimeOption {
-  label: string;
-}
+interface AnimeOption { label: string }
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -26,34 +20,45 @@ const Home: React.FC = () => {
   const [selectedAnime1, setSelectedAnime1] = useState<AnimeOption | string | null>(null);
   const [selectedAnime2, setSelectedAnime2] = useState<AnimeOption | string | null>(null);
 
-  const fetchAnimeTitles = async (
+  const runFetch = async (
     query: string,
     setter: React.Dispatch<React.SetStateAction<AnimeOption[]>>,
     setLoading: React.Dispatch<React.SetStateAction<boolean>>
   ) => {
-    if (!query) {
+    if (!query || query.trim().length < 2) {
       setter([]);
       return;
     }
     try {
       setLoading(true);
-      const res = await axios.get('http://localhost:5000/api/anime/titles', {
-        params: { q: query, limit: 10 },
-      });
-      setter(res.data);
-    } catch (err) {
-      console.error('Error fetching titles:', err);
+      const res = await fetchTitles(query.trim(), 10);
+      // de-dupe by lower-cased label
+      const seen = new Set<string>();
+      const list: AnimeOption[] = [];
+      for (const r of res) {
+        const label = (r?.label ?? '').trim();
+        if (!label) continue;
+        const key = label.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          list.push({ label });
+        }
+      }
+      setter(list);
+    } catch (e) {
+      console.error('Error fetching titles:', e);
+      setter([]);
     } finally {
       setLoading(false);
     }
   };
 
   const debouncedFetch1 = useMemo(
-    () => debounce((q: string) => fetchAnimeTitles(q, setOptions1, setLoading1), 300),
+    () => debounce((q: string) => runFetch(q, setOptions1, setLoading1), 300),
     []
   );
   const debouncedFetch2 = useMemo(
-    () => debounce((q: string) => fetchAnimeTitles(q, setOptions2, setLoading2), 300),
+    () => debounce((q: string) => runFetch(q, setOptions2, setLoading2), 300),
     []
   );
 
@@ -64,58 +69,36 @@ const Home: React.FC = () => {
     };
   }, [debouncedFetch1, debouncedFetch2]);
 
+  const normalize = (v: AnimeOption | string | null) =>
+    typeof v === 'string' ? v.trim() : v?.label.trim();
+
   const handleClick = () => {
-    const label1 = typeof selectedAnime1 === 'string' ? selectedAnime1?.trim() : selectedAnime1?.label.trim();
-    const label2 = typeof selectedAnime2 === 'string' ? selectedAnime2?.trim() : selectedAnime2?.label.trim();
+    const label1 = normalize(selectedAnime1);
+    const label2 = normalize(selectedAnime2);
 
     if (!label1 || !label2) {
       alert('Please select two anime titles.');
       return;
     }
-
     if (label1.toLowerCase() === label2.toLowerCase()) {
       alert('Please select two different anime titles.');
       return;
     }
 
-    navigate('/result', {
-      state: {
-        anime1: label1,
-        anime2: label2
-      }
-    });
+    navigate('/results', { state: { anime1: label1, anime2: label2 } });
   };
 
   return (
-    <Box
-      sx={{
-        height: '100%',
-        width: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        px: 3,
-        overflow: 'hidden',
-      }}
-    >
-      {/* Background gradient */}
-      <Box
-        sx={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          height: '100%',
-          width: '100%',
-          zIndex: -1,
-          background: `linear-gradient(to bottom right, #ff7f50 0%, #ff7f50 50%, #ffec99 50%, #ffec99 75%, #b3d9ff 75%)`,
-        }}
-      />
+    <Box sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column',
+               justifyContent: 'center', alignItems: 'center', px: 3, overflow: 'hidden' }}>
+      <Box sx={{
+        position: 'absolute', top: 0, left: 0, height: '100%', width: '100%', zIndex: -1,
+        background: `linear-gradient(to bottom right, #ff7f50 0%, #ff7f50 50%, #ffec99 50%, #ffec99 75%, #b3d9ff 75%)`,
+      }} />
 
       <Typography variant="h2" sx={{ fontWeight: 'bold', mb: 1, color: '#222' }}>
         AniMatch
       </Typography>
-
       <Typography variant="h6" sx={{ mb: 3, color: '#444', fontWeight: 600 }}>
         Find animes that match your liking!
       </Typography>
@@ -124,9 +107,8 @@ const Home: React.FC = () => {
         <Autocomplete
           freeSolo
           options={options1.filter(opt => {
-            if (!selectedAnime2) return true;
-            const selectedLabel = typeof selectedAnime2 === 'string' ? selectedAnime2 : selectedAnime2.label;
-            return opt.label !== selectedLabel;
+            const other = normalize(selectedAnime2);
+            return other ? opt.label.toLowerCase() !== other.toLowerCase() : true;
           })}
           loading={loading1}
           onInputChange={(_, value) => debouncedFetch1(value)}
@@ -155,9 +137,8 @@ const Home: React.FC = () => {
         <Autocomplete
           freeSolo
           options={options2.filter(opt => {
-            if (!selectedAnime1) return true;
-            const selectedLabel = typeof selectedAnime1 === 'string' ? selectedAnime1 : selectedAnime1.label;
-            return opt.label !== selectedLabel;
+            const other = normalize(selectedAnime1);
+            return other ? opt.label.toLowerCase() !== other.toLowerCase() : true;
           })}
           loading={loading2}
           onInputChange={(_, value) => debouncedFetch2(value)}
@@ -170,6 +151,9 @@ const Home: React.FC = () => {
               {...params}
               label="What is another anime you like?"
               variant="outlined"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleClick();
+              }}
               InputProps={{
                 ...params.InputProps,
                 endAdornment: (
@@ -188,16 +172,9 @@ const Home: React.FC = () => {
         variant="contained"
         onClick={handleClick}
         sx={{
-          px: 6,
-          py: 1.5,
-          borderRadius: '30px',
-          backgroundColor: '#2196f3',
-          fontSize: '16px',
-          fontWeight: 'bold',
-          boxShadow: '0px 4px 10px rgba(0,0,0,0.2)',
-          '&:hover': {
-            backgroundColor: '#1976d2',
-          },
+          px: 6, py: 1.5, borderRadius: '30px', backgroundColor: '#2196f3',
+          fontSize: '16px', fontWeight: 'bold', boxShadow: '0px 4px 10px rgba(0,0,0,0.2)',
+          '&:hover': { backgroundColor: '#1976d2' },
         }}
       >
         Search

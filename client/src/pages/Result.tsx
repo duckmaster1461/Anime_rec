@@ -1,521 +1,440 @@
-import React, { useState, useMemo, useEffect } from 'react';
+// src/pages/Result.tsx
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import {
+  Box,
+  Typography,
+  Grid,
+  Card,
+  CardContent,
+  CardMedia,
+  Chip,
+  Stack,
+  TextField,
+  Autocomplete,
+  CircularProgress,
+  Button,
+  MenuItem,
+  Divider,
+  Pagination,
+} from '@mui/material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import debounce from 'lodash.debounce';
-import {
-  Box, Typography, TextField, Autocomplete, Button, Pagination,
-  Slider, RadioGroup, Radio, FormControlLabel, FormLabel, Select, MenuItem,
-  CircularProgress, Grid, Card, CardActionArea, CardMedia, CardContent,
-  Chip, Stack, Tooltip, Accordion, AccordionSummary, AccordionDetails, Skeleton
-} from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import { fetchTitles, api } from '../api';
 
-// 🔁 Use your long-schema dummy data + type
-import { dummyAnimeList, Anime } from '../data/dummyAnimeData';
+interface IAnime {
+  _id: string;
+  title_userPreferred?: string;
+  title_english?: string;
+  title_romaji: string;
+  bannerImage?: string;
+  siteUrl?: string;
+  averageScore?: number;
+  popularity?: number;
+  episodes?: number;
+  duration?: number;
+  startDate_year?: number;
+  startDate_month?: number;
+  startDate_day?: number;
+  genres?: string[];
+  description?: string;
+}
 
-const PAGE_SIZE = 50;
+interface AnimeOption { label: string }
 
-// Helpers to read mixed fields safely
-const getTitle = (a: Anime) =>
-  a.title_userPreferred || a.title_romaji || a.title_native || '—';
-
-const getYear = (a: Anime) =>
-  a.startDate_year ?? a.endDate_year ?? null;
-
-const getScoreNum = (a: Anime) =>
-  typeof a.averageScore === 'number'
-    ? a.averageScore
-    : typeof a.meanScore === 'number'
-    ? a.meanScore
-    : null;
-
-const getDesc = (a: Anime) => a.description || '';
-
-const slugify = (s: string) =>
-  s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-
-const posterFromTitle = (title: string) =>
-  `https://placehold.co/300x420?text=${encodeURIComponent(title || 'No Image')}`;
-
-const getPoster = (a: Anime) =>
-  // if you later add a.imageUrl, it will be used; otherwise generate a placeholder
-  (a as any).imageUrl || posterFromTitle(getTitle(a));
+const PAGE_SIZE = 25;
 
 const Result: React.FC = () => {
-  const location = useLocation();
+  const { state } = useLocation() as { state?: { anime1?: string; anime2?: string } };
   const navigate = useNavigate();
-  const defaultAnime1 = (location.state as any)?.anime1 || '';
-  const defaultAnime2 = (location.state as any)?.anime2 || '';
 
-  const [anime1, setAnime1] = useState<string | null>(defaultAnime1);
-  const [anime2, setAnime2] = useState<string | null>(defaultAnime2);
-  const [options1, setOptions1] = useState<{ label: string }[]>([]);
-  const [options2, setOptions2] = useState<{ label: string }[]>([]);
+  // Search state
+  const [anime1, setAnime1] = useState<string>(state?.anime1 || '');
+  const [anime2, setAnime2] = useState<string>(state?.anime2 || '');
+
+  // Suggestions
+  const [opts1, setOpts1] = useState<AnimeOption[]>([]);
+  const [opts2, setOpts2] = useState<AnimeOption[]>([]);
   const [loading1, setLoading1] = useState(false);
   const [loading2, setLoading2] = useState(false);
 
-  const [beforeYear, setBeforeYear] = useState('');
-  const [afterYear, setAfterYear] = useState('');
-  const [season, setSeason] = useState(''); // kept for UI parity
-  const [rating, setRating] = useState<number[]>([0, 100]); // /100 to match averageScore
-  const [sortField, setSortField] = useState('Score');
+  // Filters (list mode)
+  const [sort, setSort] = useState<'score' | 'popularity' | 'year'>('score');
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const [minScore, setMinScore] = useState<string>(''); // numeric string
+  const [maxScore, setMaxScore] = useState<string>('');
+  const [afterYear, setAfterYear] = useState<string>(''); // numeric string
+  const [beforeYear, setBeforeYear] = useState<string>('');
+  const [genre, setGenre] = useState<string>('');
 
-  const [animeList, setAnimeList] = useState<Anime[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loadingList, setLoadingList] = useState(false);
+  // Data & pagination
+  const [rows, setRows] = useState<IAnime[]>([]);
+  const [total, setTotal] = useState<number>(0);
+  const [page, setPage] = useState<number>(1);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [err, setErr] = useState<string | null>(null);
 
-  const sortMap: Record<string, string> = {
-    Score: 'averageScore',
-    Aired: 'startDate_year',
-    // kept for future server mode
-    Popularity: 'popularity',
-    Episodes: 'episodes',
-    Duration: 'duration',
-    Favorites: 'favorites',
-    Ranked: 'ranked',
-    Members: 'members',
-  };
+  // Helpers
+  const isCompareMode = anime1.trim().length > 0 && anime2.trim().length > 0;
 
-  // ---- OFFLINE TITLE SEARCH (against long schema) ----
-  const allTitleOptions = useMemo(
-    () => dummyAnimeList.map(a => ({ label: getTitle(a) })),
-    []
-  );
+  const prettyDate = (y?: number, m?: number, d?: number) =>
+    y ? `${y}${m ? `-${String(m).padStart(2, '0')}` : ''}${d ? `-${String(d).padStart(2, '0')}` : ''}` : '—';
 
-  const localTitleSearch = (q: string, setOptions: any, setLoading: any) => {
-    if (!q?.trim()) return setOptions([]);
-    setLoading(true);
-    const lower = q.toLowerCase();
-    const out = allTitleOptions
-      .filter(o => o.label.toLowerCase().includes(lower))
-      .slice(0, 10);
-    setOptions(out);
-    setLoading(false);
-  };
-
-  const debouncedLocal1 = useMemo(
-    () => debounce((q: string) => localTitleSearch(q, setOptions1, setLoading1), 200),
-    []
-  );
-  const debouncedLocal2 = useMemo(
-    () => debounce((q: string) => localTitleSearch(q, setOptions2, setLoading2), 200),
-    []
-  );
-  useEffect(() => () => { debouncedLocal1.cancel(); debouncedLocal2.cancel(); }, [debouncedLocal1, debouncedLocal2]);
-
-  // ---- OFFLINE RESULT PIPELINE (long schema) ----
-  const computeResults = (
-    pageOverride = page,
-    overrides?: Partial<{
-      anime1: string | null;
-      anime2: string | null;
-      afterYear: string;
-      beforeYear: string;
-      rating: number[];
-      sortField: string;
-    }>
+  // Debounced suggesters
+  const runFetchTitles = async (
+    q: string,
+    setter: React.Dispatch<React.SetStateAction<AnimeOption[]>>,
+    setLoading: React.Dispatch<React.SetStateAction<boolean>>
   ) => {
-    setLoadingList(true);
-
-    const a1 = (overrides?.anime1 ?? anime1) || '';
-    const a2 = (overrides?.anime2 ?? anime2) || '';
-    const aftY = (overrides?.afterYear ?? afterYear) || '';
-    const befY = (overrides?.beforeYear ?? beforeYear) || '';
-    const rate = overrides?.rating ?? rating;
-    const sort = overrides?.sortField ?? sortField;
-
-    let list = [...dummyAnimeList];
-
-    const matchTitle = (x: Anime, q: string) =>
-      getTitle(x).toLowerCase().includes(q.toLowerCase());
-
-    // OR search: if both are filled, keep items that match either
-    if (a1 || a2) {
-      list = list.filter(x =>
-        (a1 && matchTitle(x, a1)) ||
-        (a2 && matchTitle(x, a2))
-      );
+    if (!q || q.trim().length < 2) {
+      setter([]);
+      return;
     }
-
-    // Year filters use startDate_year (fallback to endDate_year)
-    const toYear = (x: Anime) => getYear(x) ?? 0;
-
-    if (/^\d{4}$/.test(aftY)) {
-      const y = parseInt(aftY, 10);
-      list = list.filter(x => toYear(x) >= y);
+    try {
+      setLoading(true);
+      const res = await fetchTitles(q.trim(), 10);
+      const seen = new Set<string>();
+      const list: AnimeOption[] = [];
+      for (const r of res) {
+        const label = (r?.label ?? '').trim();
+        if (!label) continue;
+        const key = label.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          list.push({ label });
+        }
+      }
+      setter(list);
+    } catch (e) {
+      console.error(e);
+      setter([]);
+    } finally {
+      setLoading(false);
     }
-    if (/^\d{4}$/.test(befY)) {
-      const y = parseInt(befY, 10);
-      list = list.filter(x => toYear(x) <= y);
-    }
-
-    // Score filter uses /100 scale from averageScore/meanScore
-    const [minR, maxR] = rate;
-    list = list.filter(x => {
-      const s = getScoreNum(x);
-      if (s === null) return false;
-      return s >= minR && s <= maxR;
-    });
-
-    // Sorting
-    const key = (sortMap[sort] || 'averageScore');
-    if (key === 'averageScore') {
-      list.sort((a, b) => (getScoreNum(b) ?? -1) - (getScoreNum(a) ?? -1));
-    } else if (key === 'startDate_year') {
-      list.sort((a, b) => (getYear(b) ?? 0) - (getYear(a) ?? 0));
-    }
-
-    const total = list.length;
-    const start = (pageOverride - 1) * PAGE_SIZE;
-    const pageSlice = list.slice(start, start + PAGE_SIZE);
-
-    setTotalCount(total);
-    setAnimeList(pageSlice);
-    setLoadingList(false);
   };
 
-  // initial + on page change
-  useEffect(() => {
-    setLoadingList(true);
-    const t = setTimeout(() => computeResults(page), 200);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  const debouncedFetch1 = useMemo(
+    () => debounce((q: string) => runFetchTitles(q, setOpts1, setLoading1), 250),
+    []
+  );
+  const debouncedFetch2 = useMemo(
+    () => debounce((q: string) => runFetchTitles(q, setOpts2, setLoading2), 250),
+    []
+  );
 
-  // auto-apply on any filter change
   useEffect(() => {
-    const t = setTimeout(() => {
-      setPage(1);
-      computeResults(1);
-    }, 400);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [afterYear, beforeYear, rating, season, anime1, anime2, sortField]);
+    return () => {
+      debouncedFetch1.cancel();
+      debouncedFetch2.cancel();
+    };
+  }, [debouncedFetch1, debouncedFetch2]);
 
-  const handleSearch = () => {
-    setPage(1);
-    computeResults(1);
+  // Fetchers
+  const fetchCompare = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const params: any = { anime1: anime1.trim(), anime2: anime2.trim(), sort, order };
+      const { data } = await api.get('/api/anime', { params });
+      setRows(data?.results || []);
+      setTotal(2);
+    } catch (e) {
+      console.error(e);
+      setErr('Failed to fetch comparison.');
+      setRows([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [anime1, anime2, sort, order]);
+
+  const fetchList = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const params: any = {
+        sort, order,
+        page, limit: PAGE_SIZE,
+      };
+      if (minScore) params.minScore = minScore;
+      if (maxScore) params.maxScore = maxScore;
+      if (afterYear) params.afterYear = afterYear;
+      if (beforeYear) params.beforeYear = beforeYear;
+      if (genre) params.genre = genre;
+
+      const { data } = await api.get('/api/anime', { params });
+      setRows(data?.results || []);
+      setTotal(data?.total || 0);
+    } catch (e) {
+      console.error(e);
+      setErr('Failed to fetch list.');
+      setRows([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [sort, order, page, minScore, maxScore, afterYear, beforeYear, genre]);
+
+  // Initial load + when state changes
+  useEffect(() => {
+    // Reset page when filters change (list mode)
+    if (!isCompareMode) setPage(1);
+  }, [sort, order, minScore, maxScore, afterYear, beforeYear, genre, isCompareMode]);
+
+  useEffect(() => {
+    if (isCompareMode) fetchCompare();
+    else fetchList();
+  }, [isCompareMode, fetchCompare, fetchList, page]);
+
+  // Actions
+  const onSearchClick = () => {
+    // if both filled, compare; else list with filters
+    if (isCompareMode) fetchCompare();
+    else fetchList();
+    // also push state so refresh keeps inputs
+    navigate('/results', { replace: true, state: { anime1: anime1 || undefined, anime2: anime2 || undefined } });
   };
 
-  const handleResetFilters = () => {
+  const onClearSearch = () => {
     setAnime1('');
     setAnime2('');
-    setOptions1([]);
-    setOptions2([]);
-
-    setBeforeYear('');
-    setAfterYear('');
-    setSeason('');
-    setRating([0, 100]);
-    setSortField('Score');
-
     setPage(1);
-    computeResults(1, {
-      anime1: '',
-      anime2: '',
-      afterYear: '',
-      beforeYear: '',
-      rating: [0, 100],
-      sortField: 'Score',
-    });
   };
 
-  // shared filter UI (used in sidebar + accordion)
-  const Filters = () => (
-    <Box sx={{ display: 'grid', gap: 2 }}>
-      <Box>
-        <Typography variant="subtitle2" gutterBottom>Release Year</Typography>
-        <Stack direction="row" spacing={1}>
-          <TextField
-            label="After"
-            fullWidth
-            size="small"
-            value={afterYear}
-            onChange={(e) => setAfterYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            placeholder="e.g. 2015"
-            inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', maxLength: 4 }}
-          />
-          <TextField
-            label="Before"
-            fullWidth
-            size="small"
-            value={beforeYear}
-            onChange={(e) => setBeforeYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            placeholder="e.g. 2022"
-            inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', maxLength: 4 }}
-          />
-        </Stack>
-      </Box>
-
-      <Box>
-        <FormLabel component="legend">Season</FormLabel>
-        <RadioGroup row value={season} onChange={(e) => setSeason(e.target.value)}>
-          {['Spring', 'Summer', 'Autumn', 'Winter'].map((s) => (
-            <FormControlLabel key={s} value={s} control={<Radio />} label={s} />
-          ))}
-        </RadioGroup>
-      </Box>
-
-      <Box>
-        <Typography variant="subtitle2" gutterBottom>Score (0–100)</Typography>
-        <Slider value={rating} onChange={(_, v) => setRating(v as number[])} valueLabelDisplay="auto" min={0} max={100} />
-      </Box>
-
-      <Box>
-        <Typography variant="subtitle2" gutterBottom>Sort by</Typography>
-        <Select value={sortField} onChange={(e) => setSortField(e.target.value as string)} fullWidth size="small">
-          <MenuItem value="Score">Score</MenuItem>
-          <MenuItem value="Aired">Aired (Year)</MenuItem>
-          {/* Future server-side sorts */}
-          <MenuItem value="Popularity" disabled>Popularity</MenuItem>
-          <MenuItem value="Episodes" disabled>Episodes</MenuItem>
-          <MenuItem value="Duration" disabled>Duration</MenuItem>
-          <MenuItem value="Favorites" disabled>Favorites</MenuItem>
-          <MenuItem value="Ranked" disabled>Rank</MenuItem>
-          <MenuItem value="Members" disabled>Members</MenuItem>
-        </Select>
-      </Box>
-
-      <Stack direction="row" spacing={1}>
-        <Button fullWidth variant="contained" onClick={handleSearch}>Apply</Button>
-        <Button fullWidth variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetFilters}>Reset</Button>
-      </Stack>
-    </Box>
-  );
-
-  const ActiveChips = () => {
-    const chips: { label: string; onDelete: () => void }[] = [];
-    if (anime1) chips.push({ label: `Anime 1: ${anime1}`, onDelete: () => setAnime1('') });
-    if (anime2) chips.push({ label: `Anime 2: ${anime2}`, onDelete: () => setAnime2('') });
-    if (afterYear) chips.push({ label: `After: ${afterYear}`, onDelete: () => setAfterYear('') });
-    if (beforeYear) chips.push({ label: `Before: ${beforeYear}`, onDelete: () => setBeforeYear('') });
-    if (season) chips.push({ label: `Season: ${season}`, onDelete: () => setSeason('') });
-    if (rating[0] !== 0 || rating[1] !== 100) chips.push({ label: `Score: ${rating[0]}–${rating[1]}`, onDelete: () => setRating([0, 100]) });
-    if (!chips.length) return null;
-    return (
-      <Stack direction="row" spacing={1} sx={{ px: 2, pb: 1, flexWrap: 'wrap', gap: 1 }}>
-        {chips.map((c, i) => <Chip key={i} label={c.label} onDelete={c.onDelete} variant="outlined" size="small" />)}
-      </Stack>
-    );
-  };
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <Box sx={{ display: 'flex', height: '100%', minHeight: 0, bgcolor: 'background.default' }}>
-      {/* Sidebar (desktop) */}
-      <Box
-        sx={{
-          display: { xs: 'none', md: 'block' },
-          width: 320,
-          p: 3,
-          borderRight: '1px solid',
-          borderColor: 'divider',
-          flexShrink: 0,
-          overflow: 'auto',
-        }}
-      >
-        <Typography variant="h6" sx={{ mb: 2 }}>Filters</Typography>
-        <Filters />
-      </Box>
+    <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1400, mx: 'auto' }}>
+      <Typography variant="h4" sx={{ fontWeight: 800, mb: 2 }}>
+        {isCompareMode ? 'Compare' : 'Browse Anime'}
+      </Typography>
 
-      {/* Main */}
-      <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        {/* Filters (mobile) */}
-        <Box sx={{ display: { xs: 'block', md: 'none' }, p: 1 }}>
-          <Accordion>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography>Filters</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Filters />
-            </AccordionDetails>
-          </Accordion>
-        </Box>
-
-        {/* Sticky search row */}
-        <Box
-          sx={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 1,
-            bgcolor: 'background.paper',
-            p: 2,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-            display: 'flex',
-            gap: 2,
-            flexWrap: 'wrap',
-          }}
-        >
-          <Autocomplete
-            freeSolo
-            options={options1.filter((opt) => opt.label !== anime2)}
-            value={anime1}
-            onChange={(_, val) => setAnime1(typeof val === 'string' ? val : val?.label || '')}
-            onInputChange={(_, val) => { setAnime1(val); debouncedLocal1(val); }}
-            loading={loading1}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Anime 1"
-                size="small"
-                InputProps={{
-                  ...params.InputProps,
-                  endAdornment: (<>{loading1 ? <CircularProgress size={18} /> : null}{params.InputProps.endAdornment}</>),
-                }}
-              />
-            )}
-            sx={{ width: { xs: '100%', sm: 280, md: 320 } }}
-          />
-
-          <Autocomplete
-            freeSolo
-            options={options2.filter((opt) => opt.label !== anime1)}
-            value={anime2}
-            onChange={(_, val) => setAnime2(typeof val === 'string' ? val : val?.label || '')}
-            onInputChange={(_, val) => { setAnime2(val); debouncedLocal2(val); }}
-            loading={loading2}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Anime 2"
-                size="small"
-                InputProps={{
-                  ...params.InputProps,
-                  endAdornment: (<>{loading2 ? <CircularProgress size={18} /> : null}{params.InputProps.endAdornment}</>),
-                }}
-              />
-            )}
-            sx={{ width: { xs: '100%', sm: 280, md: 320 } }}
-          />
-
-          <Box sx={{ flex: 1 }} />
-          <Button variant="contained" onClick={handleSearch}>Search</Button>
-        </Box>
-
-        <ActiveChips />
-
-        {/* Scrollable results area */}
-        <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, md: 3 } }}>
-          <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
-            {loadingList
-              ? 'Loading results...'
-              : `Found ${totalCount || 0} result${totalCount === 1 ? '' : 's'}`}
-          </Typography>
-
-          <Grid container spacing={2}>
-            {loadingList
-              ? Array.from({ length: 12 }).map((_, i) => (
-                  <Grid key={i} item xs={12} sm={6} md={4} lg={3}>
-                    <Card sx={{ borderRadius: 3 }}>
-                      <Skeleton variant="rectangular" height={220} />
-                      <Box sx={{ p: 2 }}>
-                        <Skeleton width="60%" />
-                        <Skeleton width="90%" />
-                        <Skeleton width="80%" />
-                      </Box>
-                    </Card>
-                  </Grid>
-                ))
-              : animeList.length > 0
-              ? animeList.map((a, idx) => {
-                  const title = getTitle(a);
-                  const year = getYear(a);
-                  const score = getScoreNum(a);
-                  const desc = getDesc(a);
-                  const poster = getPoster(a);
-
-                  return (
-                    <Grid key={idx} item xs={12} sm={6} md={4} lg={3}>
-                      <Card
-                        elevation={0}
-                        sx={{
-                          borderRadius: 3,
-                          border: '1px solid',
-                          borderColor: 'divider',
-                          transition: 'transform 120ms ease',
-                          '&:hover': { transform: 'translateY(-2px)', boxShadow: 2 },
-                          height: '100%',
-                          display: 'flex',
-                          flexDirection: 'column',
-                        }}
-                      >
-                        <CardActionArea
-                          sx={{ alignItems: 'stretch' }}
-                          onClick={() => navigate(`/results/${slugify(title)}`)}
-                        >
-                          <CardMedia
-                            component="img"
-                            height="220"
-                            image={poster}
-                            alt={title}
-                            // if external image fails, swap to text placeholder
-                            onError={(e) => {
-                              const img = e.currentTarget as HTMLImageElement;
-                              img.src = posterFromTitle(title);
-                            }}
-                            sx={{ objectFit: 'cover' }}
-                          />
-                          <CardContent sx={{ minHeight: 150 }}>
-                            <Tooltip title={title}>
-                              <Typography variant="subtitle1" fontWeight={700} noWrap>
-                                {title}
-                              </Typography>
-                            </Tooltip>
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              sx={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', mt: 0.5 }}
-                            >
-                              {desc}
-                            </Typography>
-                            <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-                              <Chip size="small" label={`⭐ ${score ?? '—'}/100`} />
-                              <Chip size="small" label={year ?? '—'} />
-                            </Stack>
-                          </CardContent>
-                        </CardActionArea>
-                      </Card>
-                    </Grid>
-                  );
-                })
-              : (
-                <Grid item xs={12}>
-                  <Box
-                    sx={{
-                      border: '1px dashed',
-                      borderColor: 'divider',
-                      borderRadius: 3,
-                      p: 6,
-                      textAlign: 'center',
-                      color: 'text.secondary',
+      {/* Search + Filters */}
+      <Card elevation={2} sx={{ mb: 3 }}>
+        <Box sx={{ p: 2 }}>
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} md={4}>
+              <Autocomplete
+                freeSolo
+                options={opts1.filter(o => !anime2 || o.label.toLowerCase() !== anime2.toLowerCase())}
+                loading={loading1}
+                onInputChange={(_, value) => { setAnime1(value); debouncedFetch1(value); }}
+                value={anime1}
+                onChange={(_, value) => setAnime1(typeof value === 'string' ? value : value?.label || '')}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Anime 1"
+                    placeholder="Type to search…"
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {loading1 ? <CircularProgress color="inherit" size={18} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
                     }}
-                  >
-                    <Typography variant="subtitle1" fontWeight={700}>No results</Typography>
-                    <Typography variant="body2">
-                      Try adjusting filters or search terms, then hit <b>Search</b>.
-                    </Typography>
-                    <Button sx={{ mt: 2 }} variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetFilters}>
-                      Reset Filters
-                    </Button>
-                  </Box>
+                    onKeyDown={(e) => { if (e.key === 'Enter') onSearchClick(); }}
+                  />
+                )}
+              />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Autocomplete
+                freeSolo
+                options={opts2.filter(o => !anime1 || o.label.toLowerCase() !== anime1.toLowerCase())}
+                loading={loading2}
+                onInputChange={(_, value) => { setAnime2(value); debouncedFetch2(value); }}
+                value={anime2}
+                onChange={(_, value) => setAnime2(typeof value === 'string' ? value : value?.label || '')}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Anime 2"
+                    placeholder="Type to search…"
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {loading2 ? <CircularProgress color="inherit" size={18} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') onSearchClick(); }}
+                  />
+                )}
+              />
+            </Grid>
+
+            {/* Sort / Order */}
+            <Grid item xs={6} md={2}>
+              <TextField
+                select
+                label="Sort"
+                fullWidth
+                value={sort}
+                onChange={(e) => setSort(e.target.value as any)}
+              >
+                <MenuItem value="score">Score</MenuItem>
+                <MenuItem value="popularity">Popularity</MenuItem>
+                <MenuItem value="year">Year</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={6} md={2}>
+              <TextField
+                select
+                label="Order"
+                fullWidth
+                value={order}
+                onChange={(e) => setOrder(e.target.value as any)}
+              >
+                <MenuItem value="desc">Desc</MenuItem>
+                <MenuItem value="asc">Asc</MenuItem>
+              </TextField>
+            </Grid>
+
+            {/* Line break */}
+            <Grid item xs={12}><Divider /></Grid>
+
+            {/* Filters (list mode only) */}
+            {!isCompareMode && (
+              <>
+                <Grid item xs={6} md={2.4}>
+                  <TextField
+                    label="Min Score"
+                    type="number"
+                    value={minScore}
+                    onChange={(e) => setMinScore(e.target.value)}
+                    fullWidth
+                    inputProps={{ min: 0, max: 100 }}
+                  />
                 </Grid>
-              )}
+                <Grid item xs={6} md={2.4}>
+                  <TextField
+                    label="Max Score"
+                    type="number"
+                    value={maxScore}
+                    onChange={(e) => setMaxScore(e.target.value)}
+                    fullWidth
+                    inputProps={{ min: 0, max: 100 }}
+                  />
+                </Grid>
+                <Grid item xs={6} md={2.4}>
+                  <TextField
+                    label="After Year"
+                    type="number"
+                    value={afterYear}
+                    onChange={(e) => setAfterYear(e.target.value)}
+                    fullWidth
+                    inputProps={{ min: 1900, max: 2100 }}
+                  />
+                </Grid>
+                <Grid item xs={6} md={2.4}>
+                  <TextField
+                    label="Before Year"
+                    type="number"
+                    value={beforeYear}
+                    onChange={(e) => setBeforeYear(e.target.value)}
+                    fullWidth
+                    inputProps={{ min: 1900, max: 2100 }}
+                  />
+                </Grid>
+                <Grid item xs={12} md={2.4}>
+                  <TextField
+                    label="Genre"
+                    value={genre}
+                    onChange={(e) => setGenre(e.target.value)}
+                    fullWidth
+                    placeholder="e.g. Fantasy"
+                  />
+                </Grid>
+              </>
+            )}
+
+            {/* Actions */}
+            <Grid item xs={12} display="flex" gap={1} justifyContent="flex-end">
+              <Button variant="outlined" onClick={onClearSearch}>Clear Search</Button>
+              <Button variant="contained" onClick={onSearchClick}>Search</Button>
+            </Grid>
+          </Grid>
+        </Box>
+      </Card>
+
+      {/* Error */}
+      {err && (
+        <Typography color="error" sx={{ mb: 2 }}>
+          {err}
+        </Typography>
+      )}
+
+      {/* Results */}
+      {loading ? (
+        <Stack spacing={2}>
+          <Card><Box sx={{ height: 120 }} /></Card>
+          <Card><Box sx={{ height: 120 }} /></Card>
+          <Card><Box sx={{ height: 120 }} /></Card>
+        </Stack>
+      ) : (
+        <>
+          <Grid container spacing={2}>
+            {rows.map((a) => {
+              const title = a.title_userPreferred || a.title_english || a.title_romaji;
+              return (
+                <Grid item xs={12} sm={6} md={4} lg={3} key={a._id}>
+                  <Card elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                    {a.bannerImage && (
+                      <CardMedia component="img" image={a.bannerImage} alt={title} sx={{ height: 140, objectFit: 'cover' }} />
+                    )}
+                    <CardContent sx={{ flex: 1 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
+                        {title}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                        {a.title_english && a.title_english !== a.title_userPreferred ? a.title_english : a.title_romaji}
+                      </Typography>
+
+                      <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
+                        <Chip size="small" label={`Score: ${a.averageScore ?? '—'}`} />
+                        <Chip size="small" label={`Pop: ${a.popularity ?? '—'}`} />
+                        <Chip size="small" label={`Ep: ${a.episodes ?? '—'}`} />
+                        <Chip size="small" label={`Dur: ${a.duration ?? '—'}m`} />
+                        <Chip size="small" label={`Start: ${prettyDate(a.startDate_year, a.startDate_month, a.startDate_day)}`} />
+                      </Stack>
+
+                      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+                        {(a.genres || []).slice(0, 4).map((g) => (
+                          <Chip key={g} size="small" label={g} variant="outlined" />
+                        ))}
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              );
+            })}
           </Grid>
 
-          {!loadingList && totalCount > PAGE_SIZE && (
-            <Box mt={3} display="flex" justifyContent="center">
+          {/* Pagination only in list mode */}
+          {!isCompareMode && total > PAGE_SIZE && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
               <Pagination
-                count={Math.ceil(totalCount / PAGE_SIZE)}
                 page={page}
-                onChange={(_, val) => setPage(val)}
+                count={totalPages}
+                onChange={(_, value) => setPage(value)}
                 color="primary"
-                size="large"
+                shape="rounded"
               />
             </Box>
           )}
-        </Box>
-      </Box>
+
+          {/* Empty state */}
+          {!loading && rows.length === 0 && (
+            <Typography sx={{ mt: 2 }}>
+              No results. Try adjusting filters or search terms.
+            </Typography>
+          )}
+        </>
+      )}
     </Box>
   );
 };

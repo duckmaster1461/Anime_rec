@@ -1,28 +1,39 @@
-import React from 'react';
+// src/App.tsx
+import React, { useEffect } from 'react';
 import {
   BrowserRouter as Router,
   Routes,
   Route,
-  useLocation,
   Navigate,
-  useParams,
+  Outlet,
+  useLocation,
 } from 'react-router-dom';
 import { CssBaseline, GlobalStyles } from '@mui/material';
 import Home from './pages/Home';
 import Result from './pages/Result';
-import ResultDetail from './pages/ResultDetail';
 import Header from './components/Header';
 import Footer from './components/Footer';
-
-// ✅ small helper to redirect legacy /result/:slug -> /results/:slug
-function LegacyResultRedirect() {
-  const { slug } = useParams();
-  return <Navigate to={slug ? `/results/${slug}` : '/results'} replace />;
-}
 
 const Layout: React.FC = () => {
   const location = useLocation();
   const isHome = location.pathname === '/';
+
+  // Toggle page scroll only on Home
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    if (isHome) {
+      html.style.overflow = 'hidden';
+      body.style.overflow = 'hidden';
+    } else {
+      html.style.overflow = '';
+      body.style.overflow = '';
+    }
+    return () => {
+      html.style.overflow = '';
+      body.style.overflow = '';
+    };
+  }, [isHome]);
 
   return (
     <div
@@ -36,22 +47,14 @@ const Layout: React.FC = () => {
       }}
     >
       <Header />
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        <Routes>
-          {/* Home */}
-          <Route path="/" element={<Home />} />
-
-          {/* Canonical results routes */}
-          <Route path="/results" element={<Result />} />
-          <Route path="/results/:slug" element={<ResultDetail />} />
-
-          {/* Legacy /result redirects */}
-          <Route path="/result" element={<Navigate to="/results" replace />} />
-          <Route path="/result/:slug" element={<LegacyResultRedirect />} />
-
-          {/* 404 fallback (optional) */}
-          {/* <Route path="*" element={<Navigate to="/" replace />} /> */}
-        </Routes>
+      <div
+        style={{
+          flex: 1,
+          // Home: no scrolling; Others: enable vertical scroll
+          overflow: isHome ? 'hidden' : 'auto',
+        }}
+      >
+        <Outlet />
       </div>
       <Footer />
     </div>
@@ -64,12 +67,21 @@ const App: React.FC = () => {
       <CssBaseline />
       <GlobalStyles
         styles={{
-          html: { height: '100%', overflow: 'hidden' },
-          body: { height: '100%', margin: 0, overflow: 'hidden' },
+          html: { height: '100%' },           // ❌ no global overflow hidden
+          body: { height: '100%', margin: 0 },// ❌ no global overflow hidden
           '#root': { height: '100%' },
         }}
       />
-      <Layout />
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<Home />} />
+          <Route path="results" element={<Result />} />
+          {/* optional legacy redirect */}
+          <Route path="result" element={<Navigate to="/results" replace />} />
+          {/* fallback */}
+          {/* <Route path="*" element={<Navigate to="/" replace />} /> */}
+        </Route>
+      </Routes>
     </Router>
   );
 };
