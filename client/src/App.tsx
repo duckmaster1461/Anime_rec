@@ -11,6 +11,7 @@ import {
 import { CssBaseline, GlobalStyles } from '@mui/material';
 import Home from './pages/Home';
 import Result from './pages/Result';
+import ResultDetail from './pages/ResultDetail';
 import Header from './components/Header';
 import Footer from './components/Footer';
 
@@ -38,6 +39,7 @@ const Layout: React.FC = () => {
   return (
     <div
       style={{
+        minHeight: '100%',
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
@@ -67,8 +69,8 @@ const App: React.FC = () => {
       <CssBaseline />
       <GlobalStyles
         styles={{
-          html: { height: '100%' },           // ❌ no global overflow hidden
-          body: { height: '100%', margin: 0 },// ❌ no global overflow hidden
+          html: { height: '100%' },           // no global overflow hidden
+          body: { height: '100%', margin: 0 },// no global overflow hidden
           '#root': { height: '100%' },
         }}
       />
@@ -76,9 +78,12 @@ const App: React.FC = () => {
         <Route element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="results" element={<Result />} />
+          <Route path="results/:id" element={<ResultDetail />} />
+
           {/* optional legacy redirect */}
           <Route path="result" element={<Navigate to="/results" replace />} />
-          {/* fallback */}
+
+          {/* optional 404 fallback */}
           {/* <Route path="*" element={<Navigate to="/" replace />} /> */}
         </Route>
       </Routes>

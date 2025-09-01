@@ -17,7 +17,7 @@ import {
   Divider,
   Pagination,
 } from '@mui/material';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link as RouterLink } from 'react-router-dom';
 import debounce from 'lodash.debounce';
 import { fetchTitles, api } from '../api';
 
@@ -382,26 +382,46 @@ const Result: React.FC = () => {
               const title = a.title_userPreferred || a.title_english || a.title_romaji;
               return (
                 <Grid item xs={12} sm={6} md={4} lg={3} key={a._id}>
-                  <Card elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                  <Card
+                    component={RouterLink}
+                    to={`/results/${a._id}`}
+                    elevation={3}
+                    sx={{
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      textDecoration: 'none',
+                      color: 'inherit',
+                      transition: 'transform 120ms ease',
+                      '&:hover': { transform: 'translateY(-2px)' },
+                    }}
+                  >
                     {a.bannerImage && (
-                      <CardMedia component="img" image={a.bannerImage} alt={title} sx={{ height: 140, objectFit: 'cover' }} />
+                      <CardMedia
+                        component="img"
+                        image={a.bannerImage}
+                        alt={title}
+                        sx={{ height: 140, objectFit: 'cover' }}
+                        loading="lazy"
+                      />
                     )}
                     <CardContent sx={{ flex: 1 }}>
                       <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
                         {title}
                       </Typography>
                       <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-                        {a.title_english && a.title_english !== a.title_userPreferred ? a.title_english : a.title_romaji}
+                        {a.title_english && a.title_english !== a.title_userPreferred
+                          ? a.title_english
+                          : a.title_romaji}
                       </Typography>
 
+                      {/* Stats: only Score + Duration */}
                       <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
                         <Chip size="small" label={`Score: ${a.averageScore ?? '—'}`} />
-                        <Chip size="small" label={`Pop: ${a.popularity ?? '—'}`} />
-                        <Chip size="small" label={`Ep: ${a.episodes ?? '—'}`} />
                         <Chip size="small" label={`Dur: ${a.duration ?? '—'}m`} />
-                        <Chip size="small" label={`Start: ${prettyDate(a.startDate_year, a.startDate_month, a.startDate_day)}`} />
                       </Stack>
 
+                      {/* Genres */}
                       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
                         {(a.genres || []).slice(0, 4).map((g) => (
                           <Chip key={g} size="small" label={g} variant="outlined" />
