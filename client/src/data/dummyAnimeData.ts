@@ -12,11 +12,16 @@ export interface Anime {
   format?: string;
   description?: string;
   startDate_year?: number;
+  startDate_month: number;
+  startDate_day: number;
   endDate_year?: number;
+  endDate_month: number;
+  endDate_day: number;
   episodes?: number;
   duration?: number;
   countryOfOrigin?: string;
   source?: string;
+  bannerImage?: string;
   genres?: string[];
   tags?: AnimeTag[];
   averageScore?: number;
