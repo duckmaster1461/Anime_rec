@@ -11,7 +11,7 @@ dotenv.config({ path: './.env' });
 const app = express();
 
 // --- CORS Setup ---
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000/')
   .split(',')
   .map(o => o.trim())
   .filter(Boolean);
