@@ -1,46 +1,40 @@
 // src/api.ts
-import axios from "axios";
+import axios from 'axios';
 
-/**
- * Resolve API base URL (CRA only).
- * 1) Prefer REACT_APP_API_BASE from .env
- * 2) If localhost -> http://localhost:5000
- * 3) Otherwise -> same-origin "/"
- */
-function resolveApiBase(): string {
-  const envBase = process.env.REACT_APP_API_BASE;
+// Expect REACT_APP_API_BASE to point to your API root INCLUDING /api
+//   e.g.  https://anime-rec-server.onrender.com/api
+//         http://localhost:5000/api
+//
+// Fallbacks:
+// - dev: http://localhost:5000/api
+// - prod (same-origin): /api
+const isLocalhost =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1');
 
-  if (envBase && envBase.trim()) {
-    return envBase.replace(/\/+$/, ""); // strip trailing slash
-  }
+const envBase = (process.env.REACT_APP_API_BASE || '').trim();
+const fallbackBase = isLocalhost ? 'http://localhost:5000/api' : '/api';
 
-  const isLocalhost =
-    /^localhost$|^(\d{1,3}\.){3}\d{1,3}$/.test(window.location.hostname) ||
-    window.location.hostname.endsWith(".local");
-
-  if (isLocalhost) return "http://localhost:5000";
-
-  return "/";
-}
+// normalize: remove trailing slash
+const API_BASE = (envBase || fallbackBase).replace(/\/$/, '');
 
 export const api = axios.create({
-  baseURL: resolveApiBase(),
+  baseURL: API_BASE, // <-- already includes /api
   timeout: 10000,
 });
 
-// ---- Domain helpers ----
+// ---------- Endpoints (no leading slash) ----------
 
 // Titles
 export async function fetchTitles(q: string, limit = 10) {
-  const { data } = await api.get("/api/anime/titles", { params: { q, limit } });
-  // expect [{label: string}, ...]
+  const { data } = await api.get('anime/titles', { params: { q, limit } });
   return Array.isArray(data) ? data : [];
 }
 
 // Compare
 export async function fetchCompare(anime1: string, anime2: string) {
-  const params = { anime1, anime2, sort: "score", order: "desc" };
-  const { data } = await api.get("/api/anime", { params });
-  // expect { results: IAnimeFinal[], total?: number }
+  const params = { anime1, anime2, sort: 'score', order: 'desc' };
+  const { data } = await api.get('anime', { params });
   return data;
 }
