@@ -15,6 +15,46 @@ st.set_page_config(
     layout="wide",
 )
 
+# ==========================
+# FULLSCREEN / BACKGROUND FIX (NO LOGIC CHANGES)
+# ==========================
+st.markdown(
+    """
+    <style>
+    /* Remove Streamlit's default padding so the component can be true edge-to-edge */
+    .block-container{
+        padding-top: 0rem !important;
+        padding-bottom: 0rem !important;
+        padding-left: 0rem !important;
+        padding-right: 0rem !important;
+        max-width: 100% !important;
+    }
+
+    /* Hide Streamlit header visually without changing layout sizing */
+        header[data-testid="stHeader"]{
+        visibility: hidden !important;
+        }
+
+        div[data-testid="stToolbar"]{
+        visibility: hidden !important;
+        }
+
+
+    /* Make the whole app background match your HTML theme */
+    html, body, .stApp{
+        background: #050816 !important;
+    }
+
+    /* Ensure the embedded HTML iframe uses full width and has no border */
+    iframe[title="streamlit.components.v1.html"]{
+        width: 100% !important;
+        border: 0 !important;
+        display: block !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ==========================
 # LOAD DATA (CACHED)
@@ -70,6 +110,7 @@ html_code = """
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Anime Recommender – Tag Rank Similarity</title>
 <style>
     :root {
@@ -85,40 +126,43 @@ html_code = """
         --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.75);
     }
 
-    * {
-        box-sizing: border-box;
-    }
-    
+    * { box-sizing: border-box; }
+
     html, body {
-        height: auto !important;
-        overflow: visible !important;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        overflow: visible;
     }
 
     body {
-        margin: 0;
-        padding: 0;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
             "Segoe UI", sans-serif;
-        background: transparent;
         color: var(--text-main);
+        background: var(--bg);
     }
 
+    /* Full-bleed background; no centered "container" feel */
     .app-root {
         min-height: 100vh;
+        width: 100%;
         padding: 24px;
-        display: flex;
-        justify-content: center;
-        align-items: flex-start;
+        background:
+            radial-gradient(circle at top left, rgba(56, 189, 248, 0.10), transparent 55%),
+            radial-gradient(circle at top right, rgba(129, 140, 248, 0.14), transparent 60%),
+            var(--bg);
+        display: block;
     }
 
+    /* Make shell full-width (no max-width clamp); keep rounded corners on desktop */
     .app-shell {
         width: 100%;
-        max-width: 1280px;
-        border-radius: 28px;
-        background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 55%),
-                    radial-gradient(circle at top right, rgba(129, 140, 248, 0.12), transparent 60%),
-                    rgba(15, 23, 42, 0.98);
-        border: 1px solid rgba(148, 163, 184, 0.35);
+        max-width: none;
+        margin: 0;
+        border-radius: 22px;
+        background: rgba(15, 23, 42, 0.92);
+        border: 1px solid rgba(148, 163, 184, 0.30);
         box-shadow: var(--shadow-soft);
         padding: 24px 26px 26px;
         backdrop-filter: blur(26px);
@@ -183,9 +227,7 @@ html_code = """
         align-items: flex-start;
     }
 
-    .search-input-wrap {
-        position: relative;
-    }
+    .search-input-wrap { position: relative; }
 
     .search-label {
         font-size: 0.82rem;
@@ -211,10 +253,7 @@ html_code = """
         box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.6);
     }
 
-    .search-icon {
-        font-size: 1.1rem;
-        opacity: 0.9;
-    }
+    .search-icon { font-size: 1.1rem; opacity: 0.9; }
 
     .search-input {
         flex: 1;
@@ -225,9 +264,7 @@ html_code = """
         color: var(--text-main);
     }
 
-    .search-input::placeholder {
-        color: rgba(148, 163, 184, 0.7);
-    }
+    .search-input::placeholder { color: rgba(148, 163, 184, 0.7); }
 
     .suggestions-container {
         margin-top: 6px;
@@ -265,13 +302,9 @@ html_code = """
         border-bottom: 1px solid rgba(15, 23, 42, 0.9);
     }
 
-    .suggestion-item:last-child {
-        border-bottom: none;
-    }
+    .suggestion-item:last-child { border-bottom: none; }
 
-    .suggestion-item:hover {
-        background: rgba(30, 64, 175, 0.45);
-    }
+    .suggestion-item:hover { background: rgba(30, 64, 175, 0.45); }
 
     .suggestion-title {
         white-space: nowrap;
@@ -314,11 +347,6 @@ html_code = """
         color: var(--text-soft);
     }
 
-    .panel-subtitle {
-        font-size: 0.8rem;
-        color: var(--text-soft);
-    }
-
     .toggle-wrap {
         display: inline-flex;
         align-items: center;
@@ -328,9 +356,7 @@ html_code = """
         white-space: nowrap;
     }
 
-    .toggle-label {
-        font-size: 0.78rem;
-    }
+    .toggle-label { font-size: 0.78rem; }
 
     .switch {
         position: relative;
@@ -339,19 +365,12 @@ html_code = """
         height: 20px;
     }
 
-    .switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-    }
+    .switch input { opacity: 0; width: 0; height: 0; }
 
     .slider {
         position: absolute;
         cursor: pointer;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
+        inset: 0;
         background-color: #4b5563;
         transition: 0.2s;
         border-radius: 999px;
@@ -369,13 +388,8 @@ html_code = """
         border-radius: 50%;
     }
 
-    input:checked + .slider {
-        background-color: var(--accent-strong);
-    }
-
-    input:checked + .slider:before {
-        transform: translateX(16px);
-    }
+    input:checked + .slider { background-color: var(--accent-strong); }
+    input:checked + .slider:before { transform: translateX(16px); }
 
     .recs-grid {
         display: grid;
@@ -397,6 +411,7 @@ html_code = """
         text-decoration: none;
         color: inherit;
         cursor: pointer;
+        will-change: transform;
     }
 
     .rec-card:hover {
@@ -478,24 +493,17 @@ html_code = """
         text-overflow: ellipsis;
     }
 
-    @media (max-width: 1024px) {
-        .recs-grid {
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        }
-    }
-
     @media (max-width: 768px) {
+        .app-root { padding: 0; }
         .app-shell {
             padding: 16px;
             border-radius: 0;
             box-shadow: none;
+            border-left: 0;
+            border-right: 0;
         }
-        .recs-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-        .rec-thumb {
-            height: 140px;
-        }
+        .recs-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .rec-thumb { height: 140px; }
     }
 </style>
 </head>
@@ -601,7 +609,6 @@ const sortedTitles = allTitles.slice().sort((a, b) => {
 const searchInput = document.getElementById("search-input");
 const suggestionsList = document.getElementById("suggestions-list");
 const recsGrid = document.getElementById("recs-grid");
-const recsSubtitle = document.getElementById("recs-subtitle");
 const adultToggle = document.getElementById("adult-toggle");
 
 let currentTitle = null;
@@ -659,7 +666,6 @@ function selectAnime(title) {
 
 function renderNeighborsFor(title) {
     const list = NEIGHBORS[title] || [];
-    const totalNeighbors = list.length;
     const enriched = [];
 
     list.forEach(entry => {
@@ -701,9 +707,6 @@ function renderNeighborsFor(title) {
             siteUrl: anime.siteUrl || null
         });
     });
-
-    const filteredCount = enriched.length;
-    const maxN = Math.min(50, filteredCount);
 
     recsGrid.innerHTML = "";
     enriched.slice(0, 50).forEach(rec => {
@@ -763,5 +766,9 @@ window.addEventListener("load", () => {
 </body>
 </html>
 """
-calculate_height = 700 + len(neighbors)/3
-components.html(html_code, height=calculate_height, scrolling=False)
+
+# Keep your existing approach (no logic tampering)
+calculate_height = 700 + len(neighbors) / 3
+
+# Make it full-width and allow the page to scroll (so you don't get clipped)
+components.html(html_code, height=int(calculate_height), scrolling=True)
