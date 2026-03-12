@@ -1,13 +1,15 @@
 import json
-import os
+from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
-from pymongo import MongoClient
 
 # ==========================
-# CONFIG
+# CONFIG PATHS
 # ==========================
+ANIME_DB_PATH = Path("ANIME_REC.json")
+SIM_PATH = Path("anime_similarity_top50_rank.json")
+
 st.set_page_config(
     page_title="Anime Recommender – Tag Rank Similarity",
     layout="wide",
@@ -29,13 +31,14 @@ st.markdown(
     }
 
     /* Hide Streamlit header visually without changing layout sizing */
-    header[data-testid="stHeader"]{
+        header[data-testid="stHeader"]{
         visibility: hidden !important;
-    }
+        }
 
-    div[data-testid="stToolbar"]{
+        div[data-testid="stToolbar"]{
         visibility: hidden !important;
-    }
+        }
+
 
     /* Make the whole app background match your HTML theme */
     html, body, .stApp{
@@ -54,56 +57,13 @@ st.markdown(
 )
 
 # ==========================
-# MONGODB CONFIG (ENV/SECRETS READY)
-# ==========================
-def get_cfg(key: str, default=None):
-    # Streamlit Cloud: st.secrets
-    if key in st.secrets:
-        return st.secrets[key]
-    # Local/other: env vars
-    return os.environ.get(key, default)
-
-MONGODB_URI = get_cfg("MONGODB_URI")
-MONGODB_DB = get_cfg("MONGODB_DB", "ANIME_REC")
-ANIME_COLLECTION = get_cfg("ANIME_COLLECTION", "DATABASE_FINAL_FINAL_FINAL_FINAL")
-SIM_COLLECTION = get_cfg("SIM_COLLECTION", "SIMILARITY_TOP50")
-SIM_DOC_KEY = get_cfg("SIM_DOC_KEY", "top50_rank")  # your sim doc identifier
-
-if not MONGODB_URI:
-    st.error("Missing MONGODB_URI. Set it in Streamlit Secrets or environment variables.")
-    st.stop()
-
-@st.cache_resource
-def get_mongo_client(uri: str) -> MongoClient:
-    return MongoClient(uri)
-
-client = get_mongo_client(MONGODB_URI)
-db = client[MONGODB_DB]
-
-# ==========================
-# LOAD DATA (CACHED) - FROM MONGODB
+# LOAD DATA (CACHED)
 # ==========================
 @st.cache_data
 def load_data():
-    # Main anime DB (replaces ANIME_REC.json)
-    # Expect: one document per anime in ANIME_COLLECTION
-    data = list(
-        db[ANIME_COLLECTION].find(
-            {},
-            {
-                "_id": 0,
-                "title_romaji": 1,
-                "title": 1,
-                "genres": 1,
-                "averageScore": 1,
-                "popularity": 1,
-                "siteUrl": 1,
-                "bannerImage": 1,
-                "trailer_thumbnail": 1,
-                "isAdult": 1,
-            },
-        )
-    )
+    # Main anime DB
+    with ANIME_DB_PATH.open("r", encoding="utf-8") as f:
+        data = json.load(f)
 
     anime_by_title = {}
     for anime in data:
@@ -111,24 +71,12 @@ def load_data():
         title = str(title)
         anime_by_title[title] = anime
 
-    # Precomputed neighbors (replaces anime_similarity_top50_rank.json)
-    # Expect: one document in SIM_COLLECTION shaped like:
-    # { "key": "top50_rank", "neighbors": {...}, "meta": {...} }
-    sim_data = db[SIM_COLLECTION].find_one(
-        {"key": SIM_DOC_KEY},
-        {"_id": 0, "neighbors": 1, "meta": 1},
-    )
-    if not sim_data:
-        # fallback: if you inserted it without "key", use first doc
-        sim_data = db[SIM_COLLECTION].find_one({}, {"_id": 0, "neighbors": 1, "meta": 1})
+    # Precomputed neighbors
+    with SIM_PATH.open("r", encoding="utf-8") as f:
+        sim_data = json.load(f)
 
-    if not sim_data:
-        raise FileNotFoundError(
-            f"Could not find similarity data in MongoDB collection '{SIM_COLLECTION}'."
-        )
-
-    neighbors = sim_data.get("neighbors", {}) or {}
-    meta = sim_data.get("meta", {}) or {}
+    neighbors = sim_data.get("neighbors", {})
+    meta = sim_data.get("meta", {})
 
     return anime_by_title, neighbors, meta
 
@@ -687,6 +635,9 @@ function renderSuggestions() {
     }
 
     candidates.forEach(title => {
+        const anime = ANIME_DATA[title];
+        const pop = anime ? anime.popularity || 0 : 0;
+
         const row = document.createElement("div");
         row.className = "suggestion-item";
         row.onclick = () => selectAnime(title);
@@ -816,5 +767,8 @@ window.addEventListener("load", () => {
 </html>
 """
 
+# Keep your existing approach (no logic tampering)
 calculate_height = 700 + len(neighbors) / 3
+
+# Make it full-width and allow the page to scroll (so you don't get clipped)
 components.html(html_code, height=int(calculate_height), scrolling=True)
