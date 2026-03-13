@@ -227,7 +227,7 @@ html_code = """
         align-items: flex-start;
     }
 
-    .search-input-wrap { position: relative; }
+    .search-input-wrap { position: relative; z-index: 100; }
 
     .search-label {
         font-size: 0.82rem;
@@ -237,6 +237,7 @@ html_code = """
         margin-bottom: 6px;
     }
 
+    /* ── Search shell: pill by default, flattens bottom when open ── */
     .search-input-shell {
         display: flex;
         align-items: center;
@@ -246,9 +247,21 @@ html_code = """
         background: radial-gradient(circle at 0% 0%, rgba(94, 234, 212, 0.16), transparent 60%),
                     rgba(15, 23, 42, 0.98);
         border: 1px solid rgba(148, 163, 184, 0.55);
+        transition: border-radius 0.15s ease, border-color 0.15s ease;
+        position: relative;
+        z-index: 2;
     }
 
-    .search-input-shell:focus-within {
+    /* When dropdown is open: square off the bottom, drop the bottom border */
+    .search-input-shell.open {
+        border-radius: 18px 18px 0 0;
+        border-bottom-color: transparent;
+        border-color: var(--accent-strong);
+        box-shadow: 1px -1px 0 0 rgba(129, 140, 248, 0.6),
+                    -1px -1px 0 0 rgba(129, 140, 248, 0.6);
+    }
+
+    .search-input-shell:focus-within:not(.open) {
         border-color: var(--accent-strong);
         box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.6);
     }
@@ -266,27 +279,33 @@ html_code = """
 
     .search-input::placeholder { color: rgba(148, 163, 184, 0.7); }
 
+    /* ── Suggestions: hidden by default, absolute overlay when open ── */
     .suggestions-container {
-        margin-top: 6px;
-        border-radius: 16px;
-        border: 1px solid rgba(148, 163, 184, 0.4);
+        display: none;
+        position: absolute;
+        top: 100%;                              /* sits right below shell */
+        left: 0;
+        right: 0;
+        margin-top: 0;
+        border-radius: 0 0 16px 16px;
+        border: 1px solid var(--accent-strong);
+        border-top: none;
         background: radial-gradient(circle at top left, var(--accent-soft), transparent 55%),
                     rgba(15, 23, 42, 0.98);
         max-height: 220px;
         overflow: hidden;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6),
+                    1px 0 0 0 rgba(129, 140, 248, 0.6),
+                    -1px 0 0 0 rgba(129, 140, 248, 0.6);
+        z-index: 99;
     }
 
-    .suggestions-title {
-        font-size: 0.78rem;
-        text-transform: uppercase;
-        color: var(--text-soft);
-        letter-spacing: 0.06em;
-        padding: 6px 10px 4px;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    .suggestions-container.open {
+        display: block;
     }
 
     .suggestions-list {
-        max-height: 180px;
+        max-height: 220px;
         overflow-y: auto;
     }
 
@@ -529,13 +548,12 @@ html_code = """
     <div class="search-panel">
       <div class="search-input-wrap">
         <div class="search-label">Search anime</div>
-        <div class="search-input-shell">
+        <div class="search-input-shell" id="search-shell">
           <span class="search-icon">🔍</span>
           <input id="search-input" class="search-input" type="text" placeholder="e.g. NARUTO: Shippuuden" />
         </div>
 
-        <div class="suggestions-container">
-          <div class="suggestions-title">Suggestions (popularity aware)</div>
+        <div class="suggestions-container" id="suggestions-container">
           <div id="suggestions-list" class="suggestions-list"></div>
         </div>
       </div>
@@ -570,7 +588,7 @@ html_code = """
 const ANIME_DATA = """ + anime_json + """;
 const NEIGHBORS = """ + neighbors_json + """;
 
-const CARD_PLACEHOLDER = "https://via.placeholder.com/300x450/2b2b2b/777?text=No+Image";
+const CARD_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='200' viewBox='0 0 600 200'%3E%3Crect width='600' height='200' fill='%230f172a'/%3E%3Crect x='1' y='1' width='598' height='198' rx='11' ry='11' fill='none' stroke='%23334155' stroke-width='1.5'/%3E%3Ctext x='50%25' y='44%25' dominant-baseline='middle' text-anchor='middle' font-family='system-ui,sans-serif' font-size='28' fill='%23334155'%3E%E2%9C%A6%3C/text%3E%3Ctext x='50%25' y='64%25' dominant-baseline='middle' text-anchor='middle' font-family='system-ui,sans-serif' font-size='12' fill='%23475569' letter-spacing='2'%3ENO IMAGE%3C/text%3E%3C/svg%3E";
 
 function fmtInt(x) {
     if (x === null || x === undefined) return "—";
@@ -606,13 +624,26 @@ const sortedTitles = allTitles.slice().sort((a, b) => {
     return a.localeCompare(b);
 });
 
-const searchInput = document.getElementById("search-input");
+const searchInput  = document.getElementById("search-input");
+const searchShell  = document.getElementById("search-shell");
+const suggestionsContainer = document.getElementById("suggestions-container");
 const suggestionsList = document.getElementById("suggestions-list");
-const recsGrid = document.getElementById("recs-grid");
-const adultToggle = document.getElementById("adult-toggle");
+const recsGrid     = document.getElementById("recs-grid");
+const adultToggle  = document.getElementById("adult-toggle");
 
 let currentTitle = null;
 let includeAdult = false;
+
+/* ── Open / close helpers ── */
+function openDropdown() {
+    searchShell.classList.add("open");
+    suggestionsContainer.classList.add("open");
+}
+
+function closeDropdown() {
+    searchShell.classList.remove("open");
+    suggestionsContainer.classList.remove("open");
+}
 
 function renderSuggestions() {
     const q = searchInput.value.trim().toLowerCase();
@@ -640,7 +671,14 @@ function renderSuggestions() {
 
         const row = document.createElement("div");
         row.className = "suggestion-item";
-        row.onclick = () => selectAnime(title);
+
+        /* Use mousedown so the click fires before the input loses focus */
+        row.addEventListener("mousedown", (e) => {
+            e.preventDefault();           // prevent blur before click registers
+            searchInput.value = title;
+            selectAnime(title);
+            closeDropdown();
+        });
 
         const left = document.createElement("div");
         left.className = "suggestion-title";
@@ -723,6 +761,7 @@ function renderNeighborsFor(title) {
         img.className = "rec-thumb";
         img.src = rec.banner;
         img.alt = rec.title;
+        img.onerror = () => { img.onerror = null; img.src = CARD_PLACEHOLDER; };
         card.appendChild(img);
 
         const titleEl = document.createElement("div");
@@ -749,8 +788,22 @@ function renderNeighborsFor(title) {
     });
 }
 
+/* ── Event listeners ── */
+searchInput.addEventListener("focus", () => {
+    renderSuggestions();
+    openDropdown();
+});
+
 searchInput.addEventListener("input", () => {
     renderSuggestions();
+    openDropdown();
+});
+
+/* Close when clicking outside the search wrap */
+document.addEventListener("click", (e) => {
+    if (!e.target.closest(".search-input-wrap")) {
+        closeDropdown();
+    }
 });
 
 adultToggle.addEventListener("change", (e) => {
@@ -758,8 +811,11 @@ adultToggle.addEventListener("change", (e) => {
     if (currentTitle) renderNeighborsFor(currentTitle);
 });
 
+/* On load: pre-populate recs with the most popular anime, but keep dropdown closed */
 window.addEventListener("load", () => {
-    renderSuggestions();
+    if (sortedTitles.length > 0) {
+        selectAnime(sortedTitles[0]);
+    }
 });
 </script>
 
