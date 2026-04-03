@@ -7,7 +7,8 @@ import streamlit.components.v1 as components
 from db import load_anime_from_mongodb
 from webapp_template import HTML_TEMPLATE
 
-SIM_PATH = Path("anime_similarity_top50_rank.json")
+BASE_DIR = Path(__file__).resolve().parent
+SIM_PATH = BASE_DIR / "anime_similarity_top50_rank.json"
 
 STREAMLIT_BASE_CSS = """
 <style>
@@ -50,11 +51,23 @@ st.markdown(STREAMLIT_BASE_CSS, unsafe_allow_html=True)
 
 @st.cache_data(show_spinner=False)
 def load_similarity_data():
+    if not SIM_PATH.exists():
+        raise FileNotFoundError(
+            f"Similarity file not found at: {SIM_PATH}"
+        )
+
     with SIM_PATH.open("r", encoding="utf-8") as f:
         sim_data = json.load(f)
 
+    if not isinstance(sim_data, dict):
+        raise ValueError("Similarity JSON must be a top-level object.")
+
     neighbors = sim_data.get("neighbors", {})
     meta = sim_data.get("meta", {})
+
+    if not isinstance(neighbors, dict):
+        raise ValueError("Similarity JSON field 'neighbors' must be an object.")
+
     return neighbors, meta
 
 
@@ -73,6 +86,9 @@ def build_anime_payload():
             "trailer_thumbnail": anime.get("trailer_thumbnail"),
             "isAdult": anime.get("isAdult"),
         }
+
+    if not anime_payload:
+        raise ValueError("MongoDB returned zero anime records.")
 
     return anime_payload
 
