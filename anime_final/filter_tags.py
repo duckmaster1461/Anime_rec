@@ -34,9 +34,9 @@ def load_anime_json(file_path: Path):
 # ==========================
 # FILTER HELPERS
 # ==========================
-def has_non_empty_tags(anime: dict) -> bool:
+def has_minimum_tags(anime: dict, min_tags: int = 3) -> bool:
     tags = anime.get("tags", [])
-    return isinstance(tags, list) and len(tags) > 0
+    return isinstance(tags, list) and len(tags) >= min_tags
 
 
 def has_ranked_tag(anime: dict) -> bool:
@@ -45,9 +45,12 @@ def has_ranked_tag(anime: dict) -> bool:
         return False
 
     for tag in tags:
+        if not isinstance(tag, dict):
+            continue
         rank = tag.get("rank")
         if isinstance(rank, int):
             return True
+
     return False
 
 
@@ -79,45 +82,37 @@ def extract_clean_tags(anime: dict):
 # FILTER + SAVE FUNCTION
 # ==========================
 def filter_anime_and_save(
-    input_file="ANIME_REC.json",
-    output_file="ANIME_REC_FILTERED.json",
-    min_tags=3
+    input_file: Path = INPUT_FILE,
+    output_file: Path = OUTPUT_FILE,
+    min_tags: int = 3,
+    require_ranked_tag: bool = False
 ):
-    from pathlib import Path
-    import json
-
-    base_dir = Path(__file__).resolve().parent
-    input_path = base_dir / input_file
-    output_path = base_dir / output_file
-
-    if not input_path.exists():
-        raise FileNotFoundError(f"{input_path} not found")
-
-    with input_path.open("r", encoding="utf-8") as f:
-        data = json.load(f)
+    data = load_anime_json(input_file)
 
     print(f"Total anime loaded: {len(data)}")
 
-    filtered = []
-    removed = 0
+    before_tag_filter = len(data)
+    filtered = [anime for anime in data if has_minimum_tags(anime, min_tags)]
+    removed_by_tag_count = before_tag_filter - len(filtered)
 
-    for anime in data:
-        tags = anime.get("tags", [])
+    print(f"Anime removed with fewer than {min_tags} tags: {removed_by_tag_count}")
+    print(f"Anime remaining after minimum tag filter: {len(filtered)}")
 
-        if isinstance(tags, list) and len(tags) >= min_tags:
-            filtered.append(anime)
-        else:
-            removed += 1
+    if require_ranked_tag:
+        before_rank_filter = len(filtered)
+        filtered = [anime for anime in filtered if has_ranked_tag(anime)]
+        removed_by_rank = before_rank_filter - len(filtered)
 
-    print(f"Removed anime with < {min_tags} tags: {removed}")
-    print(f"Remaining anime: {len(filtered)}")
+        print(f"Anime removed without ranked tags: {removed_by_rank}")
+        print(f"Anime remaining after ranked-tag filter: {len(filtered)}")
 
-    with output_path.open("w", encoding="utf-8") as f:
+    with output_file.open("w", encoding="utf-8") as f:
         json.dump(filtered, f, ensure_ascii=False, indent=2)
 
-    print(f"Saved filtered file to: {output_path}")
+    print(f"Filtered file saved to: {output_file}")
 
     return filtered
+
 
 # ==========================
 # TAG RANK AGGREGATION
@@ -225,7 +220,7 @@ def main():
     filtered_data = filter_anime_and_save(
         input_file=INPUT_FILE,
         output_file=OUTPUT_FILE,
-        require_non_empty_tags=True,
+        min_tags=3,
         require_ranked_tag=False
     )
 
@@ -244,7 +239,7 @@ def main():
     print(f"DataFrame row count: {len(df)}")
     print()
 
-    # Optional:
+    # Optional: enable only for testing, very slow on large files
     # run_pairwise_comparison(df, max_pairs=20)
 
 
