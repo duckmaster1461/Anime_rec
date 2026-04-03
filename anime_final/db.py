@@ -1,32 +1,24 @@
+from functools import lru_cache
+
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
-import streamlit as st
 
 DB_NAME = "ANIME_REC"
 COLLECTION_NAME = "final_anime"
 
 
-@st.cache_resource(show_spinner=False)
-def get_mongo_client():
+@lru_cache(maxsize=1)
+def get_mongo_client(mongodb_uri: str):
     """
-    Create and reuse a single MongoDB client for the app process.
-    This avoids reconnecting on every rerun.
+    Create and reuse a single MongoDB client.
+    Pure Python: no Streamlit dependency here.
     """
-    try:
-        mongodb_uri = st.secrets["MONGODB_URI"]
-    except Exception as e:
-        raise RuntimeError(
-            "MONGODB_URI not found in Streamlit secrets. "
-            "Make sure it exists in .streamlit/secrets.toml locally "
-            "or in Streamlit Cloud App Settings > Secrets."
-        ) from e
-
     mongodb_uri = str(mongodb_uri).strip()
     if not mongodb_uri:
-        raise RuntimeError("MONGODB_URI is empty in Streamlit secrets.")
+        raise RuntimeError("MongoDB URI is empty.")
 
     try:
-        client = MongoClient(
+        return MongoClient(
             mongodb_uri,
             serverSelectionTimeoutMS=10000,
             connectTimeoutMS=10000,
@@ -36,31 +28,25 @@ def get_mongo_client():
             minPoolSize=1,
             appname="AnimeRecommenderStreamlit",
         )
-
-        # Validate once when the cached client is created
-        client.admin.command("ping")
-        return client
-
     except Exception as e:
-        raise RuntimeError(f"MongoDB connection failed: {e}") from e
+        raise RuntimeError(f"MongoDB client initialization failed: {e}") from e
 
 
-def get_anime_collection():
-    client = get_mongo_client()
+def get_anime_collection(mongodb_uri: str):
+    client = get_mongo_client(mongodb_uri)
     db = client[DB_NAME]
     return db[COLLECTION_NAME]
 
 
-def load_anime_from_mongodb():
+def load_anime_from_mongodb(mongodb_uri: str):
     """
     Load anime data and index by title.
-    Uses the cached Mongo client and fails clearly if DB is empty.
+    No Streamlit objects used here.
     """
     try:
-        collection = get_anime_collection()
+        collection = get_anime_collection(mongodb_uri)
 
         anime_by_title = {}
-
         cursor = collection.find({}, {"_id": 0}).batch_size(1000)
 
         for anime in cursor:
@@ -77,5 +63,3 @@ def load_anime_from_mongodb():
 
     except PyMongoError as e:
         raise RuntimeError(f"MongoDB query failed: {e}") from e
-    except Exception:
-        raise

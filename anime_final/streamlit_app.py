@@ -56,20 +56,25 @@ iframe[title="streamlit.components.v1.html"]{
 </style>
 """
 
-st.set_page_config(
-    page_title="Anime Recommender – Tag Rank Similarity",
-    layout="wide",
-)
 
-st.markdown(STREAMLIT_BASE_CSS, unsafe_allow_html=True)
+def get_mongodb_uri():
+    try:
+        mongodb_uri = st.secrets["MONGODB_URI"]
+    except Exception as e:
+        raise RuntimeError(
+            "MONGODB_URI not found in Streamlit secrets. "
+            "Add it in .streamlit/secrets.toml locally or in Streamlit Cloud Secrets."
+        ) from e
+
+    mongodb_uri = str(mongodb_uri).strip()
+    if not mongodb_uri:
+        raise RuntimeError("MONGODB_URI is empty in Streamlit secrets.")
+
+    return mongodb_uri
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
 def load_similarity_data():
-    """
-    Cache similarity JSON for 1 hour.
-    This avoids rereading the file on every rerun.
-    """
     if not SIM_PATH.exists():
         raise FileNotFoundError(f"Similarity file not found at: {SIM_PATH}")
 
@@ -92,13 +97,8 @@ def load_similarity_data():
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def build_anime_payload():
-    """
-    Cache Mongo-backed anime payload for 1 hour.
-    This keeps refreshes on the backend cache layer instead of repeatedly
-    rebuilding the payload on the frontend session.
-    """
-    anime_by_title = load_anime_from_mongodb()
+def build_anime_payload(mongodb_uri: str):
+    anime_by_title = load_anime_from_mongodb(mongodb_uri)
 
     anime_payload = {}
     for title, anime in anime_by_title.items():
@@ -130,8 +130,16 @@ def build_html(anime_payload, neighbors):
 
 
 def main():
+    st.set_page_config(
+        page_title="Anime Recommender – Tag Rank Similarity",
+        layout="wide",
+    )
+
+    st.markdown(STREAMLIT_BASE_CSS, unsafe_allow_html=True)
+
     try:
-        anime_payload = build_anime_payload()
+        mongodb_uri = get_mongodb_uri()
+        anime_payload = build_anime_payload(mongodb_uri)
         neighbors, _meta = load_similarity_data()
         html_code = build_html(anime_payload, neighbors)
     except Exception as e:
