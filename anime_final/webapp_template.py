@@ -1,111 +1,4 @@
-import json
-from pathlib import Path
-
-import streamlit as st
-import streamlit.components.v1 as components
-
-# ==========================
-# CONFIG PATHS
-# ==========================
-ANIME_DB_PATH = Path("ANIME_REC.json")
-SIM_PATH = Path("anime_similarity_top50_rank.json")
-
-st.set_page_config(
-    page_title="Anime Recommender – Tag Rank Similarity",
-    layout="wide",
-)
-
-# ==========================
-# FULLSCREEN / BACKGROUND FIX (NO LOGIC CHANGES)
-# ==========================
-st.markdown(
-    """
-    <style>
-    /* Remove Streamlit's default padding so the component can be true edge-to-edge */
-    .block-container{
-        padding-top: 0rem !important;
-        padding-bottom: 0rem !important;
-        padding-left: 0rem !important;
-        padding-right: 0rem !important;
-        max-width: 100% !important;
-    }
-
-    /* Hide Streamlit header visually without changing layout sizing */
-        header[data-testid="stHeader"]{
-        visibility: hidden !important;
-        }
-
-        div[data-testid="stToolbar"]{
-        visibility: hidden !important;
-        }
-
-
-    /* Make the whole app background match your HTML theme */
-    html, body, .stApp{
-        background: #050816 !important;
-    }
-
-    /* Ensure the embedded HTML iframe uses full width and has no border */
-    iframe[title="streamlit.components.v1.html"]{
-        width: 100% !important;
-        border: 0 !important;
-        display: block !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-# ==========================
-# LOAD DATA (CACHED)
-# ==========================
-@st.cache_data
-def load_data():
-    # Main anime DB
-    with ANIME_DB_PATH.open("r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    anime_by_title = {}
-    for anime in data:
-        title = anime.get("title_romaji") or anime.get("title") or "Untitled"
-        title = str(title)
-        anime_by_title[title] = anime
-
-    # Precomputed neighbors
-    with SIM_PATH.open("r", encoding="utf-8") as f:
-        sim_data = json.load(f)
-
-    neighbors = sim_data.get("neighbors", {})
-    meta = sim_data.get("meta", {})
-
-    return anime_by_title, neighbors, meta
-
-
-anime_by_title, neighbors, meta = load_data()
-
-# ==========================
-# BUILD COMPACT PAYLOADS FOR FRONTEND
-# ==========================
-anime_payload = {}
-for title, anime in anime_by_title.items():
-    anime_payload[title] = {
-        "genres": anime.get("genres") or [],
-        "averageScore": anime.get("averageScore"),
-        "popularity": anime.get("popularity") or 0,
-        "siteUrl": anime.get("siteUrl"),
-        "bannerImage": anime.get("bannerImage"),
-        "trailer_thumbnail": anime.get("trailer_thumbnail"),
-        "isAdult": anime.get("isAdult"),
-    }
-
-anime_json = json.dumps(anime_payload)
-neighbors_json = json.dumps(neighbors)
-meta_json = json.dumps(meta)
-
-# ==========================
-# FULL CUSTOM HTML APP
-# ==========================
-html_code = """
+HTML_TEMPLATE = r"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -143,7 +36,6 @@ html_code = """
         background: var(--bg);
     }
 
-    /* Full-bleed background; no centered "container" feel */
     .app-root {
         min-height: 100vh;
         width: 100%;
@@ -155,7 +47,6 @@ html_code = """
         display: block;
     }
 
-    /* Make shell full-width (no max-width clamp); keep rounded corners on desktop */
     .app-shell {
         width: 100%;
         max-width: none;
@@ -237,7 +128,6 @@ html_code = """
         margin-bottom: 6px;
     }
 
-    /* ── Search shell: pill by default, flattens bottom when open ── */
     .search-input-shell {
         display: flex;
         align-items: center;
@@ -252,7 +142,6 @@ html_code = """
         z-index: 2;
     }
 
-    /* When dropdown is open: square off the bottom, drop the bottom border */
     .search-input-shell.open {
         border-radius: 18px 18px 0 0;
         border-bottom-color: transparent;
@@ -279,11 +168,10 @@ html_code = """
 
     .search-input::placeholder { color: rgba(148, 163, 184, 0.7); }
 
-    /* ── Suggestions: hidden by default, absolute overlay when open ── */
     .suggestions-container {
         display: none;
         position: absolute;
-        top: 100%;                              /* sits right below shell */
+        top: 100%;
         left: 0;
         right: 0;
         margin-top: 0;
@@ -531,7 +419,6 @@ html_code = """
 <div class="app-root">
   <div class="app-shell">
 
-    <!-- HEADER -->
     <div class="app-header">
       <div class="app-title-block">
         <div class="app-title-row">
@@ -544,7 +431,6 @@ html_code = """
       </div>
     </div>
 
-    <!-- SEARCH BAR -->
     <div class="search-panel">
       <div class="search-input-wrap">
         <div class="search-label">Search anime</div>
@@ -559,7 +445,6 @@ html_code = """
       </div>
     </div>
 
-    <!-- MAIN LAYOUT -->
     <div class="main-layout">
       <div class="panel">
         <div class="panel-header-row">
@@ -567,7 +452,6 @@ html_code = """
             <div class="panel-title">Related anime</div>
           </div>
 
-          <!-- ADULT TOGGLE -->
           <div class="toggle-wrap">
             <span class="toggle-label">Include 18+ / adult</span>
             <label class="switch">
@@ -585,20 +469,10 @@ html_code = """
 </div>
 
 <script>
-const ANIME_DATA = """ + anime_json + """;
-const NEIGHBORS = """ + neighbors_json + """;
+const ANIME_DATA = __ANIME_JSON__;
+const NEIGHBORS = __NEIGHBORS_JSON__;
 
 const CARD_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='200' viewBox='0 0 600 200'%3E%3Crect width='600' height='200' fill='%230f172a'/%3E%3Crect x='1' y='1' width='598' height='198' rx='11' ry='11' fill='none' stroke='%23334155' stroke-width='1.5'/%3E%3Ctext x='50%25' y='44%25' dominant-baseline='middle' text-anchor='middle' font-family='system-ui,sans-serif' font-size='28' fill='%23334155'%3E%E2%9C%A6%3C/text%3E%3Ctext x='50%25' y='64%25' dominant-baseline='middle' text-anchor='middle' font-family='system-ui,sans-serif' font-size='12' fill='%23475569' letter-spacing='2'%3ENO IMAGE%3C/text%3E%3C/svg%3E";
-
-function fmtInt(x) {
-    if (x === null || x === undefined) return "—";
-    if (typeof x !== "number") {
-        const num = Number(x);
-        if (!Number.isFinite(num)) return String(x);
-        x = num;
-    }
-    return x.toLocaleString("en-US");
-}
 
 function similarityLabel(score) {
     if (score === null || score === undefined || isNaN(score)) return "Unknown";
@@ -634,7 +508,6 @@ const adultToggle  = document.getElementById("adult-toggle");
 let currentTitle = null;
 let includeAdult = false;
 
-/* ── Open / close helpers ── */
 function openDropdown() {
     searchShell.classList.add("open");
     suggestionsContainer.classList.add("open");
@@ -666,15 +539,11 @@ function renderSuggestions() {
     }
 
     candidates.forEach(title => {
-        const anime = ANIME_DATA[title];
-        const pop = anime ? anime.popularity || 0 : 0;
-
         const row = document.createElement("div");
         row.className = "suggestion-item";
 
-        /* Use mousedown so the click fires before the input loses focus */
         row.addEventListener("mousedown", (e) => {
-            e.preventDefault();           // prevent blur before click registers
+            e.preventDefault();
             searchInput.value = title;
             selectAnime(title);
             closeDropdown();
@@ -788,7 +657,6 @@ function renderNeighborsFor(title) {
     });
 }
 
-/* ── Event listeners ── */
 searchInput.addEventListener("focus", () => {
     renderSuggestions();
     openDropdown();
@@ -799,7 +667,6 @@ searchInput.addEventListener("input", () => {
     openDropdown();
 });
 
-/* Close when clicking outside the search wrap */
 document.addEventListener("click", (e) => {
     if (!e.target.closest(".search-input-wrap")) {
         closeDropdown();
@@ -811,7 +678,6 @@ adultToggle.addEventListener("change", (e) => {
     if (currentTitle) renderNeighborsFor(currentTitle);
 });
 
-/* On load: pre-populate recs with the most popular anime, but keep dropdown closed */
 window.addEventListener("load", () => {
     if (sortedTitles.length > 0) {
         selectAnime(sortedTitles[0]);
@@ -822,9 +688,3 @@ window.addEventListener("load", () => {
 </body>
 </html>
 """
-
-# Keep your existing approach (no logic tampering)
-calculate_height = 700 + len(neighbors) / 3
-
-# Make it full-width and allow the page to scroll (so you don't get clipped)
-components.html(html_code, height=int(calculate_height), scrolling=True)
