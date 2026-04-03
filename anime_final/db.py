@@ -1,17 +1,14 @@
-from pymongo import MongoClient
+from pymongo import MongoClient, DESCENDING
 from pymongo.errors import PyMongoError
 import streamlit as st
 
 DB_NAME = "ANIME_REC"
 COLLECTION_NAME = "final_anime"
+DEFAULT_PAGE_SIZE = 30
 
 
 @st.cache_resource(show_spinner=False)
 def get_mongo_client():
-    """
-    Create and reuse a single MongoDB client for the app process.
-    This avoids reconnecting on every rerun.
-    """
     try:
         mongodb_uri = st.secrets["MONGODB_URI"]
     except Exception as e:
@@ -36,46 +33,116 @@ def get_mongo_client():
             minPoolSize=1,
             appname="AnimeRecommenderStreamlit",
         )
-
-        # Validate once when the cached client is created
         client.admin.command("ping")
         return client
-
     except Exception as e:
         raise RuntimeError(f"MongoDB connection failed: {e}") from e
 
 
 def get_anime_collection():
     client = get_mongo_client()
-    db = client[DB_NAME]
-    return db[COLLECTION_NAME]
+    return client[DB_NAME][COLLECTION_NAME]
 
 
-def load_anime_from_mongodb():
+# ---------------------------------------------------------------------------
+# Paginated fetch – called on every page load / search / page-switch
+# ---------------------------------------------------------------------------
+
+def _build_search_filter(query=None):
+    if not query or not query.strip():
+        return {}
+    q = query.strip()
+    return {
+        "$or": [
+            {"title_romaji": {"$regex": q, "$options": "i"}},
+            {"title": {"$regex": q, "$options": "i"}},
+        ]
+    }
+
+
+def get_anime_page(page=1, page_size=DEFAULT_PAGE_SIZE, query=None):
+    """Return one page of anime sorted by popularity (descending)."""
+    collection = get_anime_collection()
+    skip = (page - 1) * page_size
+    filt = _build_search_filter(query)
+
+    cursor = (
+        collection.find(filt, {"_id": 0})
+        .sort("popularity", DESCENDING)
+        .skip(skip)
+        .limit(page_size)
+    )
+
+    result = {}
+    for anime in cursor:
+        title = anime.get("title_romaji") or anime.get("title") or "Untitled"
+        result[str(title)] = anime
+    return result
+
+
+def count_anime(query=None):
+    """Count documents, optionally filtered by a search query."""
+    collection = get_anime_collection()
+    filt = _build_search_filter(query)
+    if filt:
+        return collection.count_documents(filt)
+    return collection.estimated_document_count()
+
+
+# ---------------------------------------------------------------------------
+# Bulk title lookup – used to hydrate neighbour cards
+# ---------------------------------------------------------------------------
+
+def get_anime_by_titles(titles):
+    """Fetch anime docs for a list of titles (used for recommendation cards)."""
+    if not titles:
+        return {}
+    collection = get_anime_collection()
+    cursor = collection.find(
+        {
+            "$or": [
+                {"title_romaji": {"$in": titles}},
+                {"title": {"$in": titles}},
+            ]
+        },
+        {"_id": 0},
+    )
+    result = {}
+    for anime in cursor:
+        title = anime.get("title_romaji") or anime.get("title") or "Untitled"
+        result[str(title)] = anime
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Full load (cached) – kept as a fast fallback for neighbour metadata
+# ---------------------------------------------------------------------------
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def load_all_anime_metadata():
     """
-    Load anime data and index by title.
-    Uses the cached Mongo client and fails clearly if DB is empty.
+    Cache *all* anime metadata for 1 h.
+    Used to look up neighbour cards without extra per-request DB round-trips.
     """
-    try:
-        collection = get_anime_collection()
+    collection = get_anime_collection()
+    cursor = collection.find({}, {"_id": 0}).batch_size(1000)
 
-        anime_by_title = {}
+    payload = {}
+    for anime in cursor:
+        title = anime.get("title_romaji") or anime.get("title") or "Untitled"
+        payload[str(title)] = {
+            "genres": anime.get("genres") or [],
+            "averageScore": anime.get("averageScore"),
+            "popularity": anime.get("popularity") or 0,
+            "siteUrl": anime.get("siteUrl"),
+            "bannerImage": anime.get("bannerImage"),
+            "trailer_thumbnail": anime.get("trailer_thumbnail"),
+            "isAdult": anime.get("isAdult"),
+        }
 
-        cursor = collection.find({}, {"_id": 0}).batch_size(1000)
-
-        for anime in cursor:
-            title = anime.get("title_romaji") or anime.get("title") or "Untitled"
-            anime_by_title[str(title)] = anime
-
-        if not anime_by_title:
-            raise RuntimeError(
-                f"No data found in {DB_NAME}.{COLLECTION_NAME}. "
-                "Check database name, collection name, and imported documents."
-            )
-
-        return anime_by_title
-
-    except PyMongoError as e:
-        raise RuntimeError(f"MongoDB query failed: {e}") from e
-    except Exception:
-        raise
+    if not payload:
+        raise RuntimeError(
+            f"No data found in {DB_NAME}.{COLLECTION_NAME}. "
+            "Check database name, collection name, and imported documents."
+        )
+    return payload

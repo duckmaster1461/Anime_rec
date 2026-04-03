@@ -59,12 +59,14 @@ HTML_TEMPLATE = r"""
         backdrop-filter: blur(26px);
     }
 
+    /* ---- header ---- */
     .app-header {
         display: flex;
         align-items: center;
-        justify-content: flex-start;
-        margin-bottom: 18px;
+        justify-content: space-between;
+        margin-bottom: 14px;
         gap: 16px;
+        flex-wrap: wrap;
     }
 
     .app-title-block {
@@ -109,149 +111,14 @@ HTML_TEMPLATE = r"""
         color: var(--text-soft);
     }
 
-    .search-panel {
-        margin-top: 10px;
-        margin-bottom: 18px;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: 10px;
-        align-items: flex-start;
-    }
-
-    .search-input-wrap { position: relative; z-index: 100; }
-
-    .search-label {
-        font-size: 0.82rem;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--text-soft);
-        margin-bottom: 6px;
-    }
-
-    .search-input-shell {
+    /* ---- controls row ---- */
+    .controls-row {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 11px;
-        border-radius: 999px;
-        background: radial-gradient(circle at 0% 0%, rgba(94, 234, 212, 0.16), transparent 60%),
-                    rgba(15, 23, 42, 0.98);
-        border: 1px solid rgba(148, 163, 184, 0.55);
-        transition: border-radius 0.15s ease, border-color 0.15s ease;
-        position: relative;
-        z-index: 2;
-    }
-
-    .search-input-shell.open {
-        border-radius: 18px 18px 0 0;
-        border-bottom-color: transparent;
-        border-color: var(--accent-strong);
-        box-shadow: 1px -1px 0 0 rgba(129, 140, 248, 0.6),
-                    -1px -1px 0 0 rgba(129, 140, 248, 0.6);
-    }
-
-    .search-input-shell:focus-within:not(.open) {
-        border-color: var(--accent-strong);
-        box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.6);
-    }
-
-    .search-icon { font-size: 1.1rem; opacity: 0.9; }
-
-    .search-input {
-        flex: 1;
-        font-size: 0.9rem;
-        background: transparent;
-        border: none;
-        outline: none;
-        color: var(--text-main);
-    }
-
-    .search-input::placeholder { color: rgba(148, 163, 184, 0.7); }
-
-    .suggestions-container {
-        display: none;
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        margin-top: 0;
-        border-radius: 0 0 16px 16px;
-        border: 1px solid var(--accent-strong);
-        border-top: none;
-        background: radial-gradient(circle at top left, var(--accent-soft), transparent 55%),
-                    rgba(15, 23, 42, 0.98);
-        max-height: 220px;
-        overflow: hidden;
-        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6),
-                    1px 0 0 0 rgba(129, 140, 248, 0.6),
-                    -1px 0 0 0 rgba(129, 140, 248, 0.6);
-        z-index: 99;
-    }
-
-    .suggestions-container.open {
-        display: block;
-    }
-
-    .suggestions-list {
-        max-height: 220px;
-        overflow-y: auto;
-    }
-
-    .suggestion-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        padding: 7px 10px;
-        cursor: pointer;
-        font-size: 0.84rem;
-        color: var(--text-main);
-        border-bottom: 1px solid rgba(15, 23, 42, 0.9);
-    }
-
-    .suggestion-item:last-child { border-bottom: none; }
-
-    .suggestion-item:hover { background: rgba(30, 64, 175, 0.45); }
-
-    .suggestion-title {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .suggestion-meta {
-        font-size: 0.75rem;
-        color: var(--text-soft);
-        white-space: nowrap;
-    }
-
-    .main-layout {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: 18px;
-        margin-top: 4px;
-    }
-
-    .panel {
-        border-radius: var(--radius-lg);
-        background: rgba(15, 23, 42, 0.98);
-        border: 1px solid var(--border-subtle);
-        padding: 14px 14px 12px;
-    }
-
-    .panel-header-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 10px;
-        gap: 10px;
-    }
-
-    .panel-title {
-        font-size: 0.92rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--text-soft);
+        justify-content: flex-end;
+        gap: 14px;
+        margin-bottom: 14px;
+        flex-wrap: wrap;
     }
 
     .toggle-wrap {
@@ -298,9 +165,10 @@ HTML_TEMPLATE = r"""
     input:checked + .slider { background-color: var(--accent-strong); }
     input:checked + .slider:before { transform: translateX(16px); }
 
+    /* ---- grid ---- */
     .recs-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
         gap: 16px;
         margin-bottom: 6px;
     }
@@ -330,7 +198,7 @@ HTML_TEMPLATE = r"""
 
     .rec-thumb {
         width: 100%;
-        height: 100px;
+        height: 120px;
         border-radius: 12px;
         object-fit: cover;
         border: 1px solid rgba(148, 163, 184, 0.5);
@@ -368,6 +236,18 @@ HTML_TEMPLATE = r"""
         white-space: nowrap;
     }
 
+    .badge-score {
+        border-color: rgba(99, 102, 241, 0.9);
+        background: rgba(99, 102, 241, 0.12);
+        color: #c7d2fe;
+    }
+
+    .badge-pop {
+        border-color: rgba(56, 189, 248, 0.7);
+        background: rgba(56, 189, 248, 0.10);
+        color: #bae6fd;
+    }
+
     .badge-perfect {
         border-color: rgba(34, 197, 94, 0.9);
         background: rgba(34, 197, 94, 0.12);
@@ -400,6 +280,60 @@ HTML_TEMPLATE = r"""
         text-overflow: ellipsis;
     }
 
+    /* ---- detail header ---- */
+    .detail-header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 16px;
+    }
+
+    .back-btn {
+        background: var(--accent-soft);
+        border: 1px solid var(--accent);
+        color: var(--text-main);
+        padding: 7px 16px;
+        border-radius: 999px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 600;
+        transition: background 0.15s;
+        flex-shrink: 0;
+    }
+
+    .back-btn:hover {
+        background: var(--accent);
+        color: #fff;
+    }
+
+    .detail-title {
+        font-size: 1.25rem;
+        font-weight: 750;
+        line-height: 1.3;
+    }
+
+    .detail-genres {
+        font-size: 0.85rem;
+        color: var(--text-soft);
+        margin-top: 2px;
+    }
+
+    .section-label {
+        font-size: 0.88rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-soft);
+        margin: 0 0 10px;
+    }
+
+    .empty-msg {
+        text-align: center;
+        color: var(--text-soft);
+        font-size: 0.92rem;
+        padding: 32px 0;
+    }
+
+    /* ---- responsive ---- */
     @media (max-width: 768px) {
         .app-root { padding: 0; }
         .app-shell {
@@ -419,6 +353,7 @@ HTML_TEMPLATE = r"""
 <div class="app-root">
   <div class="app-shell">
 
+    <!-- Header -->
     <div class="app-header">
       <div class="app-title-block">
         <div class="app-title-row">
@@ -426,42 +361,44 @@ HTML_TEMPLATE = r"""
           <div class="app-title-text">Anime Recommender</div>
         </div>
         <div class="app-subtitle">
-          Tag-rank similarity engine. Type a title, pick a show, and explore its closest neighbors.
+          Tag-rank similarity engine &mdash; browse anime or click a title to explore its closest neighbours.
         </div>
       </div>
     </div>
 
-    <div class="search-panel">
-      <div class="search-input-wrap">
-        <div class="search-label">Search anime</div>
-        <div class="search-input-shell" id="search-shell">
-          <span class="search-icon">🔍</span>
-          <input id="search-input" class="search-input" type="text" placeholder="e.g. NARUTO: Shippuuden" />
-        </div>
-
-        <div class="suggestions-container" id="suggestions-container">
-          <div id="suggestions-list" class="suggestions-list"></div>
-        </div>
+    <!-- Controls -->
+    <div class="controls-row">
+      <div class="toggle-wrap">
+        <span class="toggle-label">Include 18+ / adult</span>
+        <label class="switch">
+          <input type="checkbox" id="adult-toggle" />
+          <span class="slider"></span>
+        </label>
       </div>
     </div>
 
-    <div class="main-layout">
-      <div class="panel">
-        <div class="panel-header-row">
-          <div>
-            <div class="panel-title">Related anime</div>
-          </div>
+    <!-- ========== BROWSE VIEW ========== -->
+    <div id="browse-view">
+      <div class="section-label">ANIME LIST</div>
+      <div id="browse-grid" class="recs-grid"></div>
+      <div id="browse-empty" class="empty-msg" style="display:none;">
+        No anime on this page.
+      </div>
+    </div>
 
-          <div class="toggle-wrap">
-            <span class="toggle-label">Include 18+ / adult</span>
-            <label class="switch">
-              <input type="checkbox" id="adult-toggle" />
-              <span class="slider"></span>
-            </label>
-          </div>
+    <!-- ========== DETAIL / RECOMMENDATION VIEW ========== -->
+    <div id="detail-view" style="display:none;">
+      <div class="detail-header">
+        <button class="back-btn" id="back-btn">&#8592; Back</button>
+        <div>
+          <div class="detail-title" id="detail-title"></div>
+          <div class="detail-genres" id="detail-genres"></div>
         </div>
-
-        <div id="recs-grid" class="recs-grid"></div>
+      </div>
+      <div class="section-label">SIMILAR ANIME</div>
+      <div id="recs-grid" class="recs-grid"></div>
+      <div id="recs-empty" class="empty-msg" style="display:none;">
+        No recommendations available for this title.
       </div>
     </div>
 
@@ -469,10 +406,29 @@ HTML_TEMPLATE = r"""
 </div>
 
 <script>
-const ANIME_DATA = __ANIME_JSON__;
-const NEIGHBORS = __NEIGHBORS_JSON__;
+/* ---------- data injected by Streamlit ---------- */
+const ANIME_DATA    = __ANIME_JSON__;
+const NEIGHBORS     = __NEIGHBORS_JSON__;
+const BROWSE_TITLES = __BROWSE_JSON__;
 
 const CARD_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='200' viewBox='0 0 600 200'%3E%3Crect width='600' height='200' fill='%230f172a'/%3E%3Crect x='1' y='1' width='598' height='198' rx='11' ry='11' fill='none' stroke='%23334155' stroke-width='1.5'/%3E%3Ctext x='50%25' y='44%25' dominant-baseline='middle' text-anchor='middle' font-family='system-ui,sans-serif' font-size='28' fill='%23334155'%3E%E2%9C%A6%3C/text%3E%3Ctext x='50%25' y='64%25' dominant-baseline='middle' text-anchor='middle' font-family='system-ui,sans-serif' font-size='12' fill='%23475569' letter-spacing='2'%3ENO IMAGE%3C/text%3E%3C/svg%3E";
+
+let includeAdult = false;
+
+/* ---------- helpers ---------- */
+
+function isAdultTitle(title, anime) {
+    if (!anime) return false;
+    if (anime.isAdult === true) return true;
+    const gl = (anime.genres || []).map(g => g.toLowerCase());
+    if (gl.includes("hentai")) return true;
+    if (title.toLowerCase().includes("hentai")) return true;
+    return false;
+}
+
+function bannerFor(anime) {
+    return anime.bannerImage || anime.trailer_thumbnail || CARD_PLACEHOLDER;
+}
 
 function similarityLabel(score) {
     if (score === null || score === undefined || isNaN(score)) return "Unknown";
@@ -484,207 +440,175 @@ function similarityLabel(score) {
 
 function labelClass(label) {
     if (label === "Perfect match") return "badge badge-perfect";
-    if (label === "Good match") return "badge badge-good";
-    if (label === "Decent match") return "badge badge-decent";
+    if (label === "Good match")    return "badge badge-good";
+    if (label === "Decent match")  return "badge badge-decent";
     return "badge badge-loose";
 }
 
-const allTitles = Object.keys(ANIME_DATA);
-
-const sortedTitles = allTitles.slice().sort((a, b) => {
-    const pa = ANIME_DATA[a].popularity || 0;
-    const pb = ANIME_DATA[b].popularity || 0;
-    if (pb !== pa) return pb - pa;
-    return a.localeCompare(b);
-});
-
-const searchInput  = document.getElementById("search-input");
-const searchShell  = document.getElementById("search-shell");
-const suggestionsContainer = document.getElementById("suggestions-container");
-const suggestionsList = document.getElementById("suggestions-list");
-const recsGrid     = document.getElementById("recs-grid");
-const adultToggle  = document.getElementById("adult-toggle");
-
-let currentTitle = null;
-let includeAdult = false;
-
-function openDropdown() {
-    searchShell.classList.add("open");
-    suggestionsContainer.classList.add("open");
+function makeImg(src, alt) {
+    const img = document.createElement("img");
+    img.className = "rec-thumb";
+    img.src = src;
+    img.alt = alt;
+    img.loading = "lazy";
+    img.onerror = () => { img.onerror = null; img.src = CARD_PLACEHOLDER; };
+    return img;
 }
 
-function closeDropdown() {
-    searchShell.classList.remove("open");
-    suggestionsContainer.classList.remove("open");
+/* ---------- views ---------- */
+
+const browseView  = document.getElementById("browse-view");
+const detailView  = document.getElementById("detail-view");
+const browseGrid  = document.getElementById("browse-grid");
+const browseEmpty = document.getElementById("browse-empty");
+const recsGrid    = document.getElementById("recs-grid");
+const recsEmpty   = document.getElementById("recs-empty");
+const detailTitle = document.getElementById("detail-title");
+const detailGenres= document.getElementById("detail-genres");
+const backBtn     = document.getElementById("back-btn");
+const adultToggle = document.getElementById("adult-toggle");
+
+function showBrowse() {
+    browseView.style.display = "";
+    detailView.style.display = "none";
+    renderBrowseGrid();
 }
 
-function renderSuggestions() {
-    const q = searchInput.value.trim().toLowerCase();
-    let candidates;
-
-    if (!q) {
-        candidates = sortedTitles.slice(0, 10);
-    } else {
-        candidates = sortedTitles.filter(t => t.toLowerCase().includes(q)).slice(0, 10);
-    }
-
-    suggestionsList.innerHTML = "";
-
-    if (candidates.length === 0) {
-        const empty = document.createElement("div");
-        empty.className = "suggestion-item";
-        empty.textContent = "No matches";
-        suggestionsList.appendChild(empty);
-        return;
-    }
-
-    candidates.forEach(title => {
-        const row = document.createElement("div");
-        row.className = "suggestion-item";
-
-        row.addEventListener("mousedown", (e) => {
-            e.preventDefault();
-            searchInput.value = title;
-            selectAnime(title);
-            closeDropdown();
-        });
-
-        const left = document.createElement("div");
-        left.className = "suggestion-title";
-        left.textContent = title;
-
-        const right = document.createElement("div");
-        right.className = "suggestion-meta";
-
-        row.appendChild(left);
-        row.appendChild(right);
-        suggestionsList.appendChild(row);
-    });
-
-    if (!currentTitle && candidates.length > 0) {
-        selectAnime(candidates[0]);
-    }
+function showDetail(title) {
+    browseView.style.display = "none";
+    detailView.style.display = "";
+    renderDetail(title);
 }
 
-function selectAnime(title) {
-    currentTitle = title;
-    renderNeighborsFor(title);
-}
+/* ---- browse grid ---- */
 
-function renderNeighborsFor(title) {
-    const list = NEIGHBORS[title] || [];
-    const enriched = [];
+function renderBrowseGrid() {
+    browseGrid.innerHTML = "";
+    let count = 0;
 
-    list.forEach(entry => {
-        const recTitle = entry.title;
-        const score = entry.score;
-        const anime = ANIME_DATA[recTitle];
-
+    BROWSE_TITLES.forEach(title => {
+        const anime = ANIME_DATA[title];
         if (!anime) return;
+        if (!includeAdult && isAdultTitle(title, anime)) return;
 
-        if (!includeAdult) {
-            const genresLower = (anime.genres || []).map(g => g.toLowerCase());
-            const titleLower = recTitle.toLowerCase();
-
-            if (
-                anime.isAdult === true ||
-                genresLower.includes("hentai") ||
-                titleLower.includes("hentai")
-            ) {
-                return;
-            }
-        }
-
-        const genres = (anime.genres || []).join(", ");
-        const banner =
-            anime.bannerImage ||
-            anime.trailer_thumbnail ||
-            CARD_PLACEHOLDER;
-
-        const sim = typeof score === "number" ? Math.round(score * 100) / 100 : score;
-        const label = similarityLabel(sim);
-
-        enriched.push({
-            rank: enriched.length + 1,
-            title: recTitle,
-            similarity: sim,
-            matchLabel: label,
-            genres,
-            banner,
-            siteUrl: anime.siteUrl || null
-        });
-    });
-
-    recsGrid.innerHTML = "";
-    enriched.slice(0, 50).forEach(rec => {
-        const card = document.createElement(rec.siteUrl ? "a" : "div");
+        count++;
+        const card = document.createElement("div");
         card.className = "rec-card";
+        card.addEventListener("click", () => showDetail(title));
 
-        if (rec.siteUrl) {
-            card.href = rec.siteUrl;
-            card.target = "_blank";
-            card.rel = "noopener noreferrer";
-        }
-
-        const img = document.createElement("img");
-        img.className = "rec-thumb";
-        img.src = rec.banner;
-        img.alt = rec.title;
-        img.onerror = () => { img.onerror = null; img.src = CARD_PLACEHOLDER; };
-        card.appendChild(img);
+        card.appendChild(makeImg(bannerFor(anime), title));
 
         const titleEl = document.createElement("div");
         titleEl.className = "rec-title";
-        titleEl.textContent = `#${rec.rank} · ${rec.title}`;
+        titleEl.textContent = title;
         card.appendChild(titleEl);
 
         const metaRow = document.createElement("div");
         metaRow.className = "rec-meta-row";
 
-        const badgeSpan = document.createElement("span");
-        badgeSpan.className = labelClass(rec.matchLabel);
-        badgeSpan.textContent = rec.matchLabel;
-        metaRow.appendChild(badgeSpan);
+        if (anime.averageScore) {
+            const sb = document.createElement("span");
+            sb.className = "badge badge-score";
+            sb.textContent = "★ " + anime.averageScore;
+            metaRow.appendChild(sb);
+        }
+
+        if (anime.popularity) {
+            const pb = document.createElement("span");
+            pb.className = "badge badge-pop";
+            pb.textContent = "♥ " + anime.popularity.toLocaleString();
+            metaRow.appendChild(pb);
+        }
 
         card.appendChild(metaRow);
 
         const genresEl = document.createElement("div");
         genresEl.className = "rec-genres";
-        genresEl.textContent = rec.genres || "—";
+        genresEl.textContent = (anime.genres || []).join(", ") || "—";
+        card.appendChild(genresEl);
+
+        browseGrid.appendChild(card);
+    });
+
+    browseEmpty.style.display = count === 0 ? "" : "none";
+}
+
+/* ---- detail / recommendations ---- */
+
+function renderDetail(title) {
+    const anime = ANIME_DATA[title];
+    detailTitle.textContent = title;
+    detailGenres.textContent = anime ? (anime.genres || []).join(", ") : "";
+
+    const list = NEIGHBORS[title] || [];
+    recsGrid.innerHTML = "";
+    let count = 0;
+
+    list.forEach(entry => {
+        const recTitle = entry.title;
+        const score    = entry.score;
+        const recAnime = ANIME_DATA[recTitle];
+        if (!recAnime) return;
+        if (!includeAdult && isAdultTitle(recTitle, recAnime)) return;
+
+        count++;
+        const rank = count;
+
+        const card = document.createElement("a");
+        card.className = "rec-card";
+        if (recAnime.siteUrl) {
+            card.href = recAnime.siteUrl;
+            card.target = "_blank";
+            card.rel = "noopener noreferrer";
+        }
+
+        card.appendChild(makeImg(bannerFor(recAnime), recTitle));
+
+        const titleEl = document.createElement("div");
+        titleEl.className = "rec-title";
+        titleEl.textContent = "#" + rank + " · " + recTitle;
+        card.appendChild(titleEl);
+
+        const metaRow = document.createElement("div");
+        metaRow.className = "rec-meta-row";
+
+        const sim = typeof score === "number" ? Math.round(score * 100) / 100 : score;
+        const lbl = similarityLabel(sim);
+        const badge = document.createElement("span");
+        badge.className = labelClass(lbl);
+        badge.textContent = lbl;
+        metaRow.appendChild(badge);
+
+        card.appendChild(metaRow);
+
+        const genresEl = document.createElement("div");
+        genresEl.className = "rec-genres";
+        genresEl.textContent = (recAnime.genres || []).join(", ") || "—";
         card.appendChild(genresEl);
 
         recsGrid.appendChild(card);
     });
+
+    recsEmpty.style.display = count === 0 ? "" : "none";
 }
 
-searchInput.addEventListener("focus", () => {
-    renderSuggestions();
-    openDropdown();
-});
+/* ---------- events ---------- */
 
-searchInput.addEventListener("input", () => {
-    renderSuggestions();
-    openDropdown();
-});
-
-document.addEventListener("click", (e) => {
-    if (!e.target.closest(".search-input-wrap")) {
-        closeDropdown();
-    }
-});
+backBtn.addEventListener("click", showBrowse);
 
 adultToggle.addEventListener("change", (e) => {
     includeAdult = e.target.checked;
-    if (currentTitle) renderNeighborsFor(currentTitle);
-});
-
-window.addEventListener("load", () => {
-    if (sortedTitles.length > 0) {
-        selectAnime(sortedTitles[0]);
+    /* refresh whichever view is currently visible */
+    if (detailView.style.display !== "none") {
+        renderDetail(detailTitle.textContent);
+    } else {
+        renderBrowseGrid();
     }
 });
-</script>
 
+/* ---------- boot ---------- */
+window.addEventListener("load", showBrowse);
+</script>
 </body>
 </html>
 """
