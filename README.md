@@ -1,68 +1,78 @@
+# Anime Recommender (MongoDB + Streamlit)
 
-# MERNBase
+A high-performance anime recommendation web app built with: - MongoDB
+(data storage) - Streamlit (backend + UI container) - Custom HTML/JS
+frontend (search + recommendation UI)
 
-This project is a MERN Stack Template designed to provide a ready-to-use boilerplate for building full-stack web applications using MongoDB, Express, React, and Node.js. It serves as a foundation for developers to kickstart their projects without the hassle of setting up folder structures, installing dependencies, or configuring essential tools.
+------------------------------------------------------------------------
 
----
+## 🚀 Features
 
-# Who is this for?
-- Developers looking for a pre-configured MERN stack setup to save time and streamline the initial development process.
-- Students or learners who want a simple and structured starting point for practicing full-stack development.
-- Teams or freelancers building scalable web applications with React for the frontend and Node.js for the backend.
+-   🔍 Search anime instantly (client-side)
+-   📊 Tag-based similarity recommendations
+-   ⚡ Fast performance (preloaded dataset + caching)
+-   🎨 Custom UI (not standard Streamlit widgets)
+-   🗄️ MongoDB backend integration
+-   🔒 Secure secrets handling
 
-## **Prerequisites**
+------------------------------------------------------------------------
 
-Before you begin, ensure you have the following installed on your machine:
+## 📁 Project Structure
 
-- [Node.js](https://nodejs.org/) (version 14.x or above)
-- [npm](https://www.npmjs.com/) (Node Package Manager)
-- [MongoDB Atlas](https://www.mongodb.com/atlas/database) or a local MongoDB instance
-- [Git](https://git-scm.com/)
+    .
+    ├── .streamlit/
+    │   └── secrets.toml
+    ├── anime_final/
+    │   ├── streamlit_app.py
+    │   ├── db.py
+    │   ├── webapp_template.py
+    │   ├── anime_similarity_top50_rank.json
+    ├── requirements.txt
+    └── README.md
 
----
+------------------------------------------------------------------------
 
-## **Setup Instructions**
+## ⚙️ Setup
 
-### 1. Clone the repository:
-```bash
-git clone <repository-url>
-cd <repository-name>
-```
+### Install dependencies
 
-### 2. Navigate to folder directory and Install Dependencies (for both Client and Server)
-```bash
-cd <repository-name>
-```
-```bash
-npm install
-```
+    pip install -r requirements.txt
 
-### 4. Create .env file in root folder
-```bash
-MONGO_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/mydatabase?retryWrites=true&w=majority
+### Setup secrets
 
-```
+Create `.streamlit/secrets.toml`:
 
----
+    MONGODB_URI = "your-mongodb-uri"
 
-## **Run the Application**
+------------------------------------------------------------------------
 
-### 1. Start the Server
-```bash
-npm start
-```
+## ▶️ Run locally
 
-### 2. Access the API
-```bash
-http://localhost:5000
-```
+    streamlit run anime_final/streamlit_app.py
 
-### 3. Start the Client
-```bash
-npm start
-```
+------------------------------------------------------------------------
 
-### 2. Access the API
-```bash
-http://localhost:3000
-```
+## ☁️ Deploy
+
+-   Use Streamlit Cloud
+-   Set entry file: `anime_final/streamlit_app.py`
+-   Add secrets in dashboard
+
+------------------------------------------------------------------------
+
+## 🧠 Architecture
+
+MongoDB → Backend → HTML Template → Browser
+
+------------------------------------------------------------------------
+
+## ⚠️ Notes
+
+-   Search runs on frontend (no backend query per keystroke)
+-   Full dataset loads once
+
+------------------------------------------------------------------------
+
+## 👤 Author
+
+Mehaan Ahuja
