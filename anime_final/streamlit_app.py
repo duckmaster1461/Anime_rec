@@ -28,6 +28,22 @@ div[data-testid="stToolbar"]{
     visibility: hidden !important;
 }
 
+div[data-testid="stStatusWidget"]{
+    visibility: hidden !important;
+}
+
+div[data-testid="stDecoration"]{
+    visibility: hidden !important;
+}
+
+#MainMenu{
+    visibility: hidden !important;
+}
+
+footer{
+    visibility: hidden !important;
+}
+
 html, body, .stApp{
     background: #050816 !important;
 }
@@ -40,7 +56,6 @@ iframe[title="streamlit.components.v1.html"]{
 </style>
 """
 
-
 st.set_page_config(
     page_title="Anime Recommender – Tag Rank Similarity",
     layout="wide",
@@ -49,12 +64,14 @@ st.set_page_config(
 st.markdown(STREAMLIT_BASE_CSS, unsafe_allow_html=True)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=3600)
 def load_similarity_data():
+    """
+    Cache similarity JSON for 1 hour.
+    This avoids rereading the file on every rerun.
+    """
     if not SIM_PATH.exists():
-        raise FileNotFoundError(
-            f"Similarity file not found at: {SIM_PATH}"
-        )
+        raise FileNotFoundError(f"Similarity file not found at: {SIM_PATH}")
 
     with SIM_PATH.open("r", encoding="utf-8") as f:
         sim_data = json.load(f)
@@ -68,11 +85,19 @@ def load_similarity_data():
     if not isinstance(neighbors, dict):
         raise ValueError("Similarity JSON field 'neighbors' must be an object.")
 
+    if not neighbors:
+        raise ValueError("Similarity JSON loaded but 'neighbors' is empty.")
+
     return neighbors, meta
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=3600)
 def build_anime_payload():
+    """
+    Cache Mongo-backed anime payload for 1 hour.
+    This keeps refreshes on the backend cache layer instead of repeatedly
+    rebuilding the payload on the frontend session.
+    """
     anime_by_title = load_anime_from_mongodb()
 
     anime_payload = {}
@@ -94,6 +119,9 @@ def build_anime_payload():
 
 
 def build_html(anime_payload, neighbors):
+    if "__ANIME_JSON__" not in HTML_TEMPLATE or "__NEIGHBORS_JSON__" not in HTML_TEMPLATE:
+        raise ValueError("HTML template placeholders are missing.")
+
     return (
         HTML_TEMPLATE
         .replace("__ANIME_JSON__", json.dumps(anime_payload, ensure_ascii=False))

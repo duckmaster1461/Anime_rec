@@ -6,10 +6,11 @@ DB_NAME = "ANIME_REC"
 COLLECTION_NAME = "final_anime"
 
 
+@st.cache_resource(show_spinner=False)
 def get_mongo_client():
     """
-    Create MongoDB client using Streamlit secrets.
-    Works for both local .streamlit/secrets.toml and Streamlit Cloud secrets.
+    Create and reuse a single MongoDB client for the app process.
+    This avoids reconnecting on every rerun.
     """
     try:
         mongodb_uri = st.secrets["MONGODB_URI"]
@@ -20,19 +21,23 @@ def get_mongo_client():
             "or in Streamlit Cloud App Settings > Secrets."
         ) from e
 
-    if not mongodb_uri or not str(mongodb_uri).strip():
+    mongodb_uri = str(mongodb_uri).strip()
+    if not mongodb_uri:
         raise RuntimeError("MONGODB_URI is empty in Streamlit secrets.")
 
     try:
         client = MongoClient(
-            str(mongodb_uri).strip(),
+            mongodb_uri,
             serverSelectionTimeoutMS=10000,
             connectTimeoutMS=10000,
             socketTimeoutMS=15000,
             retryWrites=True,
+            maxPoolSize=20,
+            minPoolSize=1,
+            appname="AnimeRecommenderStreamlit",
         )
 
-        # Force connection check immediately
+        # Validate once when the cached client is created
         client.admin.command("ping")
         return client
 
@@ -49,14 +54,14 @@ def get_anime_collection():
 def load_anime_from_mongodb():
     """
     Load anime data and index by title.
-    Fails clearly if DB is empty or misconfigured.
+    Uses the cached Mongo client and fails clearly if DB is empty.
     """
     try:
         collection = get_anime_collection()
 
         anime_by_title = {}
 
-        cursor = collection.find({}, {"_id": 0})
+        cursor = collection.find({}, {"_id": 0}).batch_size(1000)
 
         for anime in cursor:
             title = anime.get("title_romaji") or anime.get("title") or "Untitled"
